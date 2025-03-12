@@ -77,7 +77,12 @@ export async function generateCompletion(prompt: string, options: CompletionOpti
       ...defaultOptions,
     });
 
-    return response.choices[0].message.content.trim();
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No completion content returned from OpenAI');
+    }
+
+    return content.trim();
   } catch (error) {
     console.error('Error generating completion with OpenAI:', error);
     if (error instanceof Error) {

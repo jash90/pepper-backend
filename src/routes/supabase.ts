@@ -1,5 +1,7 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import { Request, Response, RequestHandler } from '../types/express';
 import { serviceClient } from '../lib/supabase';
+import supabaseService from '../services/supabase';
 
 const router = express.Router();
 
@@ -31,7 +33,7 @@ interface OperationResult {
  * @desc Check if Supabase is configured correctly and test connection
  * @access Public
  */
-router.get('/check', async (_req: Request, res: Response) => {
+router.get('/check', (async (_req: Request, res: Response) => {
   try {
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -41,7 +43,21 @@ router.get('/check', async (_req: Request, res: Response) => {
         config: {
           url: !!process.env.SUPABASE_URL,
           serviceKey: !!process.env.SUPABASE_SERVICE_KEY
-        }
+        },
+        message: 'Please check your .env file and ensure SUPABASE_URL and SUPABASE_SERVICE_KEY are properly set.'
+      });
+    }
+    
+    // Check if service key is a placeholder
+    if (process.env.SUPABASE_SERVICE_KEY === 'your_service_key_here') {
+      return res.status(503).json({
+        status: 'error',
+        error: 'Supabase service key is not properly configured.',
+        config: {
+          url: process.env.SUPABASE_URL,
+          serviceKey: '*****'
+        },
+        message: 'Please replace the placeholder service key in your .env file with your actual Supabase service key.'
       });
     }
     
@@ -183,14 +199,14 @@ router.get('/check', async (_req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route POST /api/supabase/fix-rls
  * @desc Fix RLS policies for categorized_articles table
  * @access Public (should be restricted in production)
  */
-router.post('/fix-rls', async (_req: Request, res: Response) => {
+router.post('/fix-rls', (async (_req: Request, res: Response) => {
   try {
     // Restrict to development environment
     if (process.env.NODE_ENV === 'production') {
@@ -381,14 +397,14 @@ router.post('/fix-rls', async (_req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/supabase/status
  * @desc Check status of Supabase connection
  * @access Public
  */
-router.get('/status', async (_req: Request, res: Response) => {
+router.get('/status', (async (_req: Request, res: Response) => {
   try {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
       return res.status(200).json({
@@ -436,6 +452,6 @@ router.get('/status', async (_req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 export default router; 

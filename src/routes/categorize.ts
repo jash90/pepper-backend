@@ -1,17 +1,9 @@
-import express, { Request, Response } from 'express';
-import * as categorizeService from '../services/categorizeService';
-import { Article } from '../types';
+import express from 'express';
+import { Request, Response, CategorizeRequestBody, RequestHandler } from '../types/express';
+import categorizeService from '../services/categorizeService';
+import { Article } from '../lib/scraper';
 
 const router = express.Router();
-
-interface CategorizeRequestBody {
-  articles: Article[];
-  options?: {
-    useAI?: boolean;
-    saveToSupabase?: boolean;
-    [key: string]: any;
-  };
-}
 
 /**
  * @route POST /api/categorize
@@ -20,7 +12,7 @@ interface CategorizeRequestBody {
  * @body {Array} articles - Artykuły do kategoryzacji
  * @body {Object} options - Opcje kategoryzacji
  */
-router.post('/', async (req: Request<{}, {}, CategorizeRequestBody>, res: Response) => {
+router.post('/', (async (req: Request<{}, any, CategorizeRequestBody>, res: Response) => {
   try {
     const { articles, options = {} } = req.body;
     
@@ -32,7 +24,7 @@ router.post('/', async (req: Request<{}, {}, CategorizeRequestBody>, res: Respon
     }
     
     // Categorize articles using the service
-    const result = await categorizeService.categorizeArticles(articles, options);
+    const result = await categorizeService.categorizeArticles(articles as Article[], options);
     
     // Return the categorized articles
     return res.status(200).json(result);
@@ -44,15 +36,15 @@ router.post('/', async (req: Request<{}, {}, CategorizeRequestBody>, res: Respon
       error: error instanceof Error ? error.message : 'An unknown error occurred' 
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/categorize/categories
  * @desc Returns predefined categories
  * @access Public
  */
-router.get('/categories', (_req: Request, res: Response) => {
+router.get('/categories', ((_req: Request, res: Response) => {
   res.json({ categories: categorizeService.getCategories() });
-});
+}) as RequestHandler);
 
 export default router; 

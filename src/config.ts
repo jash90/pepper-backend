@@ -172,7 +172,7 @@ const config: AppConfig & Record<string, any> = {
   CACHE,
   SERVER,
   API,
-  DEBUG: DEBUG_SETTINGS,
+  DEBUG_CONFIG: DEBUG_SETTINGS,
   SCHEDULER
 };
 

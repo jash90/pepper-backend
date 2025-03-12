@@ -1,21 +1,11 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import { Request, Response, CacheQueryParams, LookupRequestBody, RequestHandler } from '../types/express';
+import supabaseService from '../services/supabase';
+import { ERROR_CODES } from '../constants';
 import { serviceClient, createUniqueId, toArticle } from '../lib/supabase';
 import { Article } from '../types';
 
 const router = express.Router();
-
-// Define interface for request query parameters
-interface CacheQueryParams {
-  days?: string;
-  limit?: string;
-  mode?: string;
-  category?: string;
-}
-
-// Define interface for lookup request body
-interface LookupRequestBody {
-  links: string[];
-}
 
 /**
  * @route GET /api/cache/lookup
@@ -23,7 +13,7 @@ interface LookupRequestBody {
  * @access Public
  * @body {string[]} links - Article links to check
  */
-router.post('/lookup', async (req: Request<{}, {}, LookupRequestBody>, res: Response) => {
+router.post('/lookup', (async (req: Request<{}, any, LookupRequestBody>, res: Response) => {
   try {
     const { links } = req.body;
     
@@ -93,7 +83,7 @@ router.post('/lookup', async (req: Request<{}, {}, LookupRequestBody>, res: Resp
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/cache
@@ -102,10 +92,10 @@ router.post('/lookup', async (req: Request<{}, {}, LookupRequestBody>, res: Resp
  * @query {number} days - Number of days of data to retrieve (default: 7)
  * @query {number} limit - Maximum number of results to return (default: 500)
  */
-router.get('/', async (req: Request<{}, {}, {}, CacheQueryParams>, res: Response) => {
+router.get('/', (async (req: Request<{}, any, {}, CacheQueryParams>, res: Response) => {
   try {
-    const days = parseInt(req.query.days || '7', 10);
-    const limit = parseInt(req.query.limit || '500', 10);
+    const days = parseInt(req.query.days as string || '7', 10);
+    const limit = parseInt(req.query.limit as string || '500', 10);
     
     if (limit > 1000) {
       return res.status(400).json({
@@ -175,7 +165,7 @@ router.get('/', async (req: Request<{}, {}, {}, CacheQueryParams>, res: Response
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route DELETE /api/cache/purge
@@ -184,10 +174,10 @@ router.get('/', async (req: Request<{}, {}, {}, CacheQueryParams>, res: Response
  * @query {string} mode - Purge mode: "all" or "older_than_days" (default: "older_than_days")
  * @query {number} days - For older_than_days mode, delete records older than this many days (default: 30)
  */
-router.delete('/purge', async (req: Request<{}, {}, {}, CacheQueryParams>, res: Response) => {
+router.delete('/purge', (async (req: Request<{}, any, {}, CacheQueryParams>, res: Response) => {
   try {
     const mode = req.query.mode || 'older_than_days';
-    const days = parseInt(req.query.days || '30', 10);
+    const days = parseInt(req.query.days as string || '30', 10);
     
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -246,14 +236,14 @@ router.delete('/purge', async (req: Request<{}, {}, {}, CacheQueryParams>, res: 
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/cache/stats
  * @desc Get statistics about the cache
  * @access Public
  */
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', (async (req: Request, res: Response) => {
   try {
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -331,7 +321,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/cache/category/:category
@@ -341,11 +331,11 @@ router.get('/stats', async (req: Request, res: Response) => {
  * @query {number} days - Number of days of data to retrieve (default: 7)
  * @query {number} limit - Maximum number of results to return (default: 500)
  */
-router.get('/category/:category', async (req: Request<{category: string}, {}, {}, CacheQueryParams>, res: Response) => {
+router.get('/category/:category', (async (req: Request<{category: string}, any, {}, CacheQueryParams>, res: Response) => {
   try {
     const { category } = req.params;
-    const days = parseInt(req.query.days || '7', 10);
-    const limit = parseInt(req.query.limit || '500', 10);
+    const days = parseInt(req.query.days as string || '7', 10);
+    const limit = parseInt(req.query.limit as string || '500', 10);
     
     if (limit > 1000) {
       return res.status(400).json({
@@ -398,6 +388,6 @@ router.get('/category/:category', async (req: Request<{category: string}, {}, {}
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler<{category: string}, any, {}, CacheQueryParams>);
 
 export default router; 

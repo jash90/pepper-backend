@@ -1,5 +1,5 @@
 import * as openaiService from './openai';
-import * as supabaseService from './supabase';
+import supabaseService from './supabase';
 import config from '../config';
 import { Article } from '../lib/scraper';
 
@@ -44,9 +44,64 @@ export interface CategorizeResult {
   fromCache: boolean;
 }
 
-// Helper function to create a unique ID for an article based on its link
+// Helper functions to work with Supabase
+function isSupabaseConfigured(): boolean {
+  return !!(
+    config.SERVICES && 
+    config.SERVICES.SUPABASE && 
+    config.SERVICES.SUPABASE.URL && 
+    config.SERVICES.SUPABASE.SERVICE_KEY
+  );
+}
+
+function toArticleFromSupabase(cachedArticle: any): Article {
+  return {
+    title: cachedArticle.title || '',
+    description: cachedArticle.description || '',
+    price: cachedArticle.price || '',
+    shippingPrice: cachedArticle.shipping_price || '',
+    image: cachedArticle.image || '',
+    link: cachedArticle.link || ''
+  };
+}
+
+// Wrapper functions for Supabase service
+async function getDataFromSupabase(table: string, options: any): Promise<any[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+  
+  try {
+    // @ts-ignore - We know this function exists in the imported module
+    return await supabaseService.getData(table, options);
+  } catch (error) {
+    console.error(`Error getting data from Supabase table ${table}:`, error);
+    return [];
+  }
+}
+
+async function upsertDataToSupabase(table: string, data: any, options: any): Promise<any> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+  
+  try {
+    // @ts-ignore - We know this function exists in the imported module
+    return await supabaseService.upsertData(table, data, options);
+  } catch (error) {
+    console.error(`Error upserting data to Supabase table ${table}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Create a unique ID for an article based on its link
+ * @param link - The article link
+ * @returns A unique ID
+ */
 function createArticleId(link: string): string {
-  return supabaseService.createUniqueId(link);
+  // Use the same method as in supabaseService to ensure consistency
+  return Buffer.from(link).toString('base64');
 }
 
 /**
@@ -187,72 +242,74 @@ function categorizeArticleWithKeywords(article: Article): Category {
 }
 
 /**
- * Checks Supabase cache for already categorized articles
+ * Check if articles are already in the cache
  * @param articles - Articles to check
- * @returns Cached and uncached articles
+ * @returns Result with cached and uncached articles
  */
 async function checkCache(articles: Article[]): Promise<CacheCheckResult> {
-  if (!supabaseService.isConfigured()) {
-    console.log('Supabase not configured, skipping cache check')
-    return { cachedArticles: {}, uncachedArticles: articles, cachedArticleIds: [] }
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase is not configured, skipping cache check');
+    return {
+      cachedArticles: {},
+      uncachedArticles: articles,
+      cachedArticleIds: []
+    };
   }
 
-  // Extract article links
-  const articleLinks = articles.map(article => article.link)
-  const articleIds = articleLinks.map(createArticleId)
-
-  const cachedArticles: Record<string, Article[]> = {}
-  const cachedArticleIds: string[] = []
-
   try {
-    // Process in smaller batches to avoid query string length limitations
-    const BATCH_SIZE = 5 // Using an even smaller batch size for improved reliability with long IDs
+    // Create a map of article IDs to articles for quick lookup
+    const articleMap = new Map<string, Article>();
+    const articleIds: string[] = [];
     
-    for (let i = 0; i < articleIds.length; i += BATCH_SIZE) {
-      const batchIds = articleIds.slice(i, i + BATCH_SIZE)
+    articles.forEach(article => {
+      const articleId = createArticleId(article.link);
+      articleMap.set(articleId, article);
+      articleIds.push(articleId);
+    });
+    
+    // Process in batches to avoid query string length limitations
+    const batchSize = 20; // Reduced from 100 to avoid query string length issues
+    const cachedArticles: Record<string, Article[]> = {};
+    const cachedArticleIds: string[] = [];
+    
+    for (let i = 0; i < articleIds.length; i += batchSize) {
+      const batchIds = articleIds.slice(i, i + batchSize);
       
+      // Skip empty batches
       if (batchIds.length === 0) continue;
       
-      try {
-        console.log(`Checking cache for batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(articleIds.length/BATCH_SIZE)} with ${batchIds.length} articles`);
-        
-        const data = await supabaseService.getData<supabaseService.CategorizedArticle>('categorized_articles', {
-          filter: {
-            column: 'article_id',
-            operator: 'in',
-            value: batchIds
-          }
-        })
-        
-        // Process data
-        if (data && data.length > 0) {
-          console.log(`Found ${data.length} cached articles in batch ${Math.floor(i/BATCH_SIZE) + 1}`);
-          data.forEach((cachedArticle) => {
-            const article = supabaseService.toArticle(cachedArticle);
-            const category = cachedArticle.category;
-            
-            if (!cachedArticles[category]) {
-              cachedArticles[category] = [];
-            }
-            
-            cachedArticles[category].push(article);
-          });
-          
-          cachedArticleIds.push(...data.map(item => item.article_id));
+      // Query Supabase for cached articles
+      const data = await getDataFromSupabase('categorized_articles', {
+        filter: {
+          column: 'article_id',
+          operator: 'in',
+          value: batchIds
         }
-      } catch (error) {
-        console.error(`Error querying Supabase for batch ${Math.floor(i/BATCH_SIZE) + 1}:`, error);
-        // Continue with next batch if there's an error
+      });
+      
+      // Process the results
+      if (data && Array.isArray(data) && data.length > 0) {
+        data.forEach((cachedArticle: any) => {
+          const article = toArticleFromSupabase(cachedArticle);
+          const category = cachedArticle.category;
+          
+          if (!cachedArticles[category]) {
+            cachedArticles[category] = [];
+          }
+          
+          cachedArticles[category].push(article);
+          
+          // Remove from the map to get uncached articles later
+          articleMap.delete(cachedArticle.article_id);
+        });
+        
+        // Add to cached article IDs
+        cachedArticleIds.push(...data.map((item: any) => item.article_id));
       }
     }
     
-    // Find articles that are not in the cache
-    const uncachedArticles = articles.filter(article => {
-      const articleId = createArticleId(article.link);
-      return !cachedArticleIds.includes(articleId);
-    });
-    
-    console.log(`Cache check complete: ${cachedArticleIds.length} cached articles, ${uncachedArticles.length} uncached articles`);
+    // Get uncached articles from the map
+    const uncachedArticles = Array.from(articleMap.values());
     
     return {
       cachedArticles,
@@ -270,67 +327,59 @@ async function checkCache(articles: Article[]): Promise<CacheCheckResult> {
 }
 
 /**
- * Saves categorized articles to Supabase
+ * Save categorized articles to Supabase
  * @param articles - Articles to save
  * @param articleCategories - Map of article links to categories
- * @returns Number of saved articles
+ * @returns Number of articles saved
  */
 async function saveToSupabase(articles: Article[], articleCategories: Record<string, string>): Promise<number> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase is not configured, skipping save to Supabase');
+    return 0;
+  }
+  
   try {
-    // Check if Supabase is configured
-    if (!supabaseService.isConfigured()) {
-      console.warn('Supabase not configured, skipping save');
-      return 0;
-    }
-    
-    // Convert articles to Supabase format
-    const recordsToInsert = articles.map(article => {
-      const category = articleCategories[article.link] || 'Other Deals';
-      return supabaseService.toCategorizedArticle(article, category);
+    // Convert articles to Supabase records
+    const records = articles.map(article => {
+      const category = articleCategories[article.link];
+      if (!category) {
+        throw new Error(`No category found for article: ${article.title}`);
+      }
+      
+      return {
+        article_id: createArticleId(article.link),
+        title: article.title,
+        description: article.description || '',
+        price: article.price || '',
+        shipping_price: article.shippingPrice || '',
+        image: article.image || '',
+        link: article.link,
+        category: category,
+        created_at: new Date().toISOString()
+      };
     });
     
-    if (recordsToInsert.length === 0) {
-      console.log('No articles to save to Supabase');
-      return 0;
-    }
+    // Process in batches to avoid payload too large errors
+    const batchSize = 50;
+    let savedCount = 0;
     
-    console.log(`Preparing to save ${recordsToInsert.length} articles to Supabase`);
-    
-    // Process in batches to avoid potential Supabase limitations
-    const batchSize = 50; // Reduced batch size for better reliability
-    let totalSaved = 0;
-    
-    for (let i = 0; i < recordsToInsert.length; i += batchSize) {
-      const batch = recordsToInsert.slice(i, i + batchSize);
-      console.log(`Saving batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(recordsToInsert.length/batchSize)}, size: ${batch.length}`);
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
       
       try {
-        // Use upsert instead of insert to handle duplicate key errors
-        await supabaseService.upsertData('categorized_articles', batch, {
+        await upsertDataToSupabase('categorized_articles', batch, {
           onConflict: 'article_id',
           returning: 'minimal'
         });
-        totalSaved += batch.length;
-        console.log(`Successfully saved batch ${Math.floor(i/batchSize) + 1}, total saved: ${totalSaved}`);
+        
+        savedCount += batch.length;
       } catch (error) {
-        console.error(`Error saving batch ${Math.floor(i/batchSize) + 1} to Supabase:`, error);
-        // Try to save articles one by one to prevent losing the entire batch
-        for (const record of batch) {
-          try {
-            await supabaseService.upsertData('categorized_articles', record, {
-              onConflict: 'article_id',
-              returning: 'minimal'
-            });
-            totalSaved += 1;
-          } catch (individualError) {
-            console.error('Error saving individual article:', individualError);
-          }
-        }
+        console.error(`Error saving batch ${i / batchSize + 1}:`, error);
+        // Continue with next batch despite error
       }
     }
     
-    console.log(`Saved ${totalSaved} articles to Supabase`);
-    return totalSaved;
+    return savedCount;
   } catch (error) {
     console.error('Error saving to Supabase:', error);
     return 0;
@@ -425,11 +474,13 @@ function getCategories(): readonly string[] {
   return predefinedCategories;
 }
 
-export {
-  categorizeArticles,
+// Export as default for easier importing
+export default {
+  createArticleId,
   categorizeArticleWithAI,
   categorizeArticleWithKeywords,
   checkCache,
   saveToSupabase,
-  getCategories,
+  categorizeArticles,
+  getCategories
 }; 

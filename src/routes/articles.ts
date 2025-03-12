@@ -1,20 +1,10 @@
-import express, { Request, Response } from 'express';
-import * as articlesService from '../services/articlesService';
+import express from 'express';
+import { Request, Response, ArticlesRequestQuery, RequestHandler } from '../types/express';
+import articlesService from '../services/articlesService';
+import { ERROR_CODES } from '../constants';
+import categorizeService from '../services/categorizeService';
 
 const router = express.Router();
-
-// Define request query interface for articles routes
-interface ArticlesRequestQuery {
-  page?: string;
-  pages?: string;
-  maxPages?: string;
-  batchSize?: string;
-  days?: string;
-  limit?: string;
-  minCached?: string;
-  fallbackPages?: string;
-  skipLocalCache?: string;
-}
 
 /**
  * @route GET /api/articles
@@ -22,7 +12,7 @@ interface ArticlesRequestQuery {
  * @access Public
  * @query {number} page - Numer strony do pobrania
  */
-router.get('/', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
+router.get('/', (async (req: Request<{}, any, {}, ArticlesRequestQuery>, res: Response) => {
   try {
     // Get the page number from the query string, default to 1
     const pageNumber = parseInt(req.query.page || '1', 10);
@@ -39,7 +29,7 @@ router.get('/', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Resp
       error: error instanceof Error ? error.message : 'An unknown error occurred' 
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/articles/multi
@@ -47,9 +37,9 @@ router.get('/', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Resp
  * @access Public
  * @query {number} pages - Liczba stron do pobrania (domyślnie 3)
  */
-router.get('/multi', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
+router.get('/multi', (async (req: Request<{}, any, {}, ArticlesRequestQuery>, res: Response) => {
   try {
-    const pagesToFetch = parseInt(req.query.pages || '3', 10);
+    const pagesToFetch = parseInt(req.query.pages as string || '3', 10);
     
     if (pagesToFetch > 10) {
       return res.status(400).json({
@@ -73,7 +63,7 @@ router.get('/multi', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res:
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/articles/fetch-categorize-cache
@@ -82,12 +72,12 @@ router.get('/multi', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res:
  * @query {number} maxPages - Opcjonalny limit maksymalnej liczby stron (domyślnie 10)
  * @query {number} batchSize - Rozmiar paczki artykułów do kategoryzacji (domyślnie 50)
  */
-router.get('/fetch-categorize-cache', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
+router.get('/fetch-categorize-cache', (async (req: Request<{}, any, {}, ArticlesRequestQuery>, res: Response) => {
   try {
     // Default to 10 pages (all pages) but allow override with maxPages parameter
-    const maxPages = req.query.maxPages ? parseInt(req.query.maxPages, 10) : 10;
+    const maxPages = req.query.maxPages ? parseInt(req.query.maxPages as string, 10) : 10;
     // Default batch size for categorization (to avoid payload too large errors)
-    const batchSize = req.query.batchSize ? parseInt(req.query.batchSize, 10) : 50;
+    const batchSize = req.query.batchSize ? parseInt(req.query.batchSize as string, 10) : 50;
     
     // Generate API base URL for internal requests
     const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
@@ -107,7 +97,7 @@ router.get('/fetch-categorize-cache', async (req: Request<{}, {}, {}, ArticlesRe
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 /**
  * @route GET /api/articles/cached
@@ -119,13 +109,13 @@ router.get('/fetch-categorize-cache', async (req: Request<{}, {}, {}, ArticlesRe
  * @query {number} fallbackPages - Liczba stron do pobrania w przypadku fallbacku (domyślnie 7)
  * @query {boolean} skipLocalCache - Czy pominąć lokalny cache SQLite (domyślnie false)
  */
-router.get('/cached', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
+router.get('/cached', (async (req: Request<{}, any, {}, ArticlesRequestQuery>, res: Response) => {
   try {
-    const days = parseInt(req.query.days || '7', 10);
-    const limit = parseInt(req.query.limit || '500', 10);
-    const minCached = req.query.minCached ? parseInt(req.query.minCached, 10) : null;
-    const fallbackPages = parseInt(req.query.fallbackPages || '7', 10);
-    const skipLocalCache = req.query.skipLocalCache === 'true';
+    const days = parseInt(req.query.days as string || '7', 10);
+    const limit = parseInt(req.query.limit as string || '500', 10);
+    const minCached = req.query.minCached ? parseInt(req.query.minCached as string, 10) : null;
+    const fallbackPages = parseInt(req.query.fallbackPages as string || '7', 10);
+    const skipLocalCache = req.query.skipCache === 'true';
     
     if (limit > 1000) {
       return res.status(400).json({
@@ -156,6 +146,6 @@ router.get('/cached', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
   }
-});
+}) as RequestHandler);
 
 export default router; 

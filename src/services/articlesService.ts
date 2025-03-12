@@ -1,5 +1,5 @@
 import { scrapeArticlesFromPepper, Article } from '../lib/scraper';
-import * as supabaseService from './supabase';
+import supabaseService from './supabase';
 import * as cacheService from './cacheService';
 import config from '../config';
 
@@ -133,7 +133,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
   }
   
   // Check if Supabase is configured
-  if (!config.SERVICES.SUPABASE.IS_CONFIGURED) {
+  if (!supabaseService.isConfigured()) {
     throw new Error('Cache service unavailable: Supabase not configured');
   }
   
@@ -177,7 +177,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
   const oldestDateIso = oldestDate.toISOString();
   
   try {
-    const data = await supabaseService.getData<supabaseService.CategorizedArticle>('categorized_articles', {
+    const data = await supabaseService.getData('categorized_articles', {
       filter: {
         column: 'created_at',
         operator: 'gte',
@@ -193,7 +193,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
     // Convert Supabase records to our application's format
     const categorizedArticles: Record<string, Article[]> = {};
     
-    (data || []).forEach((cachedArticle) => {
+    (data || []).forEach((cachedArticle: any) => {
       const article = supabaseService.toArticle(cachedArticle);
       const category = cachedArticle.category;
       
@@ -253,7 +253,7 @@ async function fetchCategorizeAndCacheArticles(options: FetchCategorizeOptions =
   const apiBaseUrl = options.apiBaseUrl || '';
   
   // Check if Supabase is configured
-  if (!config.SERVICES.SUPABASE.IS_CONFIGURED) {
+  if (!supabaseService.isConfigured()) {
     throw new Error('Cache service unavailable: Supabase not configured');
   }
   
@@ -329,12 +329,25 @@ async function fetchCategorizeAndCacheArticles(options: FetchCategorizeOptions =
       });
       
       if (!categorizeResponse.ok) {
-        const categorizeError = await categorizeResponse.json();
-        console.error(`Error in batch ${i+1}:`, categorizeError.error);
+        try {
+          const categorizeError = await categorizeResponse.json();
+          console.error(`Error in batch ${i+1}:`, categorizeError && typeof categorizeError === 'object' ? 
+            ('error' in categorizeError ? categorizeError.error : JSON.stringify(categorizeError)) : 
+            'Unknown error');
+        } catch (e) {
+          console.error(`Error in batch ${i+1}, could not parse error:`, e);
+        }
         continue; // Skip this batch if there's an error, but continue with others
       }
       
-      const { categorizedArticles, fromCache } = await categorizeResponse.json();
+      // Type assertion for the response
+      type CategorizeResponse = {
+        categorizedArticles: any[];
+        fromCache: boolean;
+      };
+      
+      const responseData = await categorizeResponse.json() as CategorizeResponse;
+      const { categorizedArticles, fromCache } = responseData;
       
       // Articles not found in cache are newly saved to Supabase by the categorize endpoint
       if (fromCache) {
@@ -351,7 +364,7 @@ async function fetchCategorizeAndCacheArticles(options: FetchCategorizeOptions =
         }
         allCategorizedArticles[category] = [
           ...allCategorizedArticles[category],
-          ...categorizedArticles[category]
+          ...(categorizedArticles[category as keyof typeof categorizedArticles] || [])
         ];
       });
       
@@ -397,7 +410,8 @@ async function fetchCategorizeAndCacheArticles(options: FetchCategorizeOptions =
   };
 }
 
-export {
+// Export the service as default
+export default {
   fetchArticlesFromPage,
   fetchArticlesFromMultiplePages,
   getCachedArticles,

@@ -79,7 +79,7 @@ async function deleteCachedValue(key: string): Promise<boolean> {
   
   try {
     // To delete a value, we simply set it to null with a very short TTL
-    return await cacheData({ key }, null, 1);
+    return await cacheData({ key }, null);
   } catch (error) {
     console.error(`Error deleting cached value for key '${key}':`, error);
     return false;

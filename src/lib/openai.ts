@@ -40,8 +40,8 @@ async function generateCompletion(prompt: string, options: CompletionOptions): P
     const response = await openai.chat.completions.create({
       model: options.model || 'gpt-3.5-turbo',
       messages: [
-        ...(options.systemMessage ? [{ role: 'system', content: options.systemMessage }] : []),
-        { role: 'user', content: prompt }
+        ...(options.systemMessage ? [{ role: 'system' as const, content: options.systemMessage }] : []),
+        { role: 'user' as const, content: prompt }
       ],
       temperature: options.temperature !== undefined ? options.temperature : 0.7,
       max_tokens: options.max_tokens,

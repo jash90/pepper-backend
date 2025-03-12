@@ -289,9 +289,14 @@ async function insertData<T = any>(table: string, data: Record<string, any> | Re
   try {
     if (!serviceClient) throw new Error('Service client initialization failed');
 
+    const insertOptions: any = {};
+    if (options.returning) {
+      insertOptions.returning = options.returning;
+    }
+
     const { data: result, error } = await serviceClient
       .from(table)
-      .insert(data, { returning: options.returning || 'minimal' });
+      .insert(data, insertOptions);
 
     if (error) {
       throw error;
@@ -321,12 +326,17 @@ async function upsertData<T = any>(table: string, data: Record<string, any> | Re
   try {
     if (!serviceClient) throw new Error('Service client initialization failed');
 
+    const upsertOptions: any = {};
+    if (options.onConflict) {
+      upsertOptions.onConflict = options.onConflict;
+    }
+    if (options.returning) {
+      upsertOptions.returning = options.returning;
+    }
+
     const { data: result, error } = await serviceClient
       .from(table)
-      .upsert(data, { 
-        onConflict: options.onConflict || 'article_id',
-        returning: options.returning || 'minimal' 
-      });
+      .upsert(data, upsertOptions);
 
     if (error) {
       throw error;
@@ -432,7 +442,8 @@ function getServiceClient(): SupabaseClient | null {
   return serviceClient;
 }
 
-export {
+// Export as default for easier importing
+export default {
   getData,
   insertData,
   updateData,

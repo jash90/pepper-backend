@@ -1,39 +1,102 @@
-const { createClient } = require('@supabase/supabase-js');
-const config = require('../config');
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import config from '../config';
 
-let supabase = null;
-let serviceClient = null;
-
-/**
- * Typy dla tabel Supabase (używane w dokumentacji)
- * @typedef {Object} CategorizedArticle
- * @property {string} article_id - Unikalny identyfikator artykułu (Base64 z linka)
- * @property {string} title - Tytuł artykułu
- * @property {string} description - Opis artykułu
- * @property {string} price - Cena artykułu
- * @property {string} shipping_price - Cena wysyłki
- * @property {string} image - URL obrazka
- * @property {string} link - Link do artykułu
- * @property {string} category - Kategoria artykułu
- * @property {string} created_at - Data utworzenia rekordu
- */
+let supabase: SupabaseClient | null = null;
+let serviceClient: SupabaseClient | null = null;
 
 /**
- * @typedef {Object} Article
- * @property {string} title - Tytuł artykułu
- * @property {string} description - Opis artykułu
- * @property {string} price - Cena artykułu
- * @property {string} shippingPrice - Cena wysyłki
- * @property {string} image - URL obrazka
- * @property {string} link - Link do artykułu
+ * Interface representing a categorized article in Supabase
  */
+export interface CategorizedArticle {
+  /** Unique article identifier (Base64 of the link) */
+  article_id: string;
+  /** Title of the article */
+  title: string;
+  /** Description of the article */
+  description: string;
+  /** Price of the article */
+  price: string;
+  /** Shipping price of the article */
+  shipping_price: string;
+  /** URL of the article image */
+  image: string;
+  /** Link to the article */
+  link: string;
+  /** Category of the article */
+  category: string;
+  /** Date when the record was created */
+  created_at: string;
+}
+
+/**
+ * Interface representing an article from Pepper
+ */
+export interface Article {
+  /** Title of the article */
+  title: string;
+  /** Description of the article */
+  description: string;
+  /** Price of the article */
+  price: string;
+  /** Shipping price of the article */
+  shippingPrice: string;
+  /** URL of the article image */
+  image: string;
+  /** Link to the article */
+  link: string;
+}
+
+/**
+ * Options for querying data from Supabase
+ */
+export interface GetDataOptions {
+  /** Fields to select */
+  select?: string;
+  /** Filter to apply to the query */
+  filter?: {
+    /** Column to filter on */
+    column: string;
+    /** Operator to use (=, !=, >, <, in, etc.) */
+    operator: string;
+    /** Value to compare against */
+    value: any;
+  };
+  /** Order specification */
+  order?: {
+    /** Column to order by */
+    column: string;
+    /** Whether to order ascending */
+    ascending?: boolean;
+  };
+  /** Maximum number of records to return */
+  limit?: number;
+  /** Number of records to skip */
+  offset?: number;
+}
+
+/**
+ * Options for inserting data into Supabase
+ */
+export interface InsertDataOptions {
+  /** What to return after insertion */
+  returning?: 'minimal' | 'representation' | '*';
+}
+
+/**
+ * Options for upserting data into Supabase
+ */
+export interface UpsertDataOptions extends InsertDataOptions {
+  /** Column to use for conflict resolution */
+  onConflict?: string;
+}
 
 /**
  * Initialize the Supabase client
+ * @returns Whether initialization was successful
  */
-function initializeSupabase() {
+function initializeSupabase(): boolean {
   try {
-    if (config.SERVICES.SUPABASE.URL && config.SERVICES.SUPABASE.ANON_KEY) {
+    if (config.SERVICES?.SUPABASE?.URL && config.SERVICES?.SUPABASE?.ANON_KEY) {
       supabase = createClient(config.SERVICES.SUPABASE.URL, config.SERVICES.SUPABASE.ANON_KEY);
       return true;
     }
@@ -47,10 +110,11 @@ function initializeSupabase() {
 
 /**
  * Initialize the Supabase service client (has full permissions, bypasses RLS)
+ * @returns Whether initialization was successful
  */
-function initializeServiceClient() {
+function initializeServiceClient(): boolean {
   try {
-    if (config.SERVICES.SUPABASE.URL && config.SERVICES.SUPABASE.SERVICE_KEY) {
+    if (config.SERVICES?.SUPABASE?.URL && config.SERVICES?.SUPABASE?.SERVICE_KEY) {
       console.log('Initializing Supabase service client with URL:', config.SERVICES.SUPABASE.URL);
       
       serviceClient = createClient(config.SERVICES.SUPABASE.URL, config.SERVICES.SUPABASE.SERVICE_KEY, {
@@ -77,19 +141,19 @@ function initializeServiceClient() {
 
 /**
  * Create a unique ID for an article from its link (used for identifying articles in cache)
- * @param {string} link - Link to the article
- * @returns {string} - Unique article identifier
+ * @param link - Link to the article
+ * @returns Unique article identifier
  */
-function createUniqueId(link) {
+function createUniqueId(link: string): string {
   return Buffer.from(link).toString('base64');
 }
 
 /**
  * Convert a Supabase record to an Article object
- * @param {CategorizedArticle} cachedArticle - Record from Supabase
- * @returns {Article} - Article object
+ * @param cachedArticle - Record from Supabase
+ * @returns Article object
  */
-function toArticle(cachedArticle) {
+function toArticle(cachedArticle: CategorizedArticle): Article {
   return {
     title: cachedArticle.title,
     description: cachedArticle.description,
@@ -102,11 +166,11 @@ function toArticle(cachedArticle) {
 
 /**
  * Convert an Article object to a Supabase record
- * @param {Article} article - Article object
- * @param {string} category - Article category
- * @returns {CategorizedArticle} - Record to save in Supabase
+ * @param article - Article object
+ * @param category - Article category
+ * @returns Record to save in Supabase
  */
-function toCategorizedArticle(article, category) {
+function toCategorizedArticle(article: Article, category: string): CategorizedArticle {
   if (!article) {
     throw new Error('Article is required');
   }
@@ -120,7 +184,7 @@ function toCategorizedArticle(article, category) {
   }
   
   // Ensure that all fields have values (even if empty strings)
-  const safeArticle = {
+  const safeArticle: CategorizedArticle = {
     article_id: createUniqueId(article.link),
     title: article.title || '',
     description: article.description || '',
@@ -137,11 +201,11 @@ function toCategorizedArticle(article, category) {
 
 /**
  * Get data from a Supabase table
- * @param {string} table - The table to query
- * @param {Object} options - Query options (select, filter, etc.)
- * @returns {Promise<Array>} The query results
+ * @param table - The table to query
+ * @param options - Query options (select, filter, etc.)
+ * @returns The query results
  */
-async function getData(table, options = {}) {
+async function getData<T = any>(table: string, options: GetDataOptions = {}): Promise<T[]> {
   if (!serviceClient) {
     if (!initializeServiceClient()) {
       throw new Error('Supabase service client is not initialized');
@@ -149,6 +213,8 @@ async function getData(table, options = {}) {
   }
 
   try {
+    if (!serviceClient) throw new Error('Service client initialization failed');
+
     let query = serviceClient.from(table).select(options.select || '*');
 
     // Apply filters if provided
@@ -167,14 +233,14 @@ async function getData(table, options = {}) {
           // Using the correct PostgREST syntax for 'in' operator
           // Format: ?column=in.(value1,value2,value3)
           const escapedValues = value.map(v => String(v).replace(/'/g, "''"));
-          query = query.filter(`${column}`, 'in', `(${escapedValues.join(',')})`);
+          query = query.filter(column, 'in', `(${escapedValues.join(',')})`);
         } else {
           // Use the standard filter method for other operators
           query = query.filter(column, operator, value);
         }
       } catch (filterError) {
         console.error('Error applying filter:', filterError, { column, operator, value });
-        throw new Error(`Failed to apply filter: ${filterError.message}`);
+        throw new Error(`Failed to apply filter: ${filterError instanceof Error ? filterError.message : String(filterError)}`);
       }
     }
 
@@ -189,7 +255,7 @@ async function getData(table, options = {}) {
       query = query.limit(options.limit);
     }
 
-    if (options.offset) {
+    if (options.offset !== undefined) {
       query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
     }
 
@@ -199,21 +265,21 @@ async function getData(table, options = {}) {
       throw error;
     }
 
-    return data;
+    return data as T[];
   } catch (error) {
     console.error(`Error fetching data from ${table}:`, error);
-    throw new Error(`Failed to fetch data from ${table}: ${error.message}`);
+    throw new Error(`Failed to fetch data from ${table}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Insert data into a Supabase table
- * @param {string} table - The table to insert into
- * @param {Object|Array} data - The data to insert
- * @param {Object} options - Additional options
- * @returns {Promise<Object>} The inserted data
+ * @param table - The table to insert into
+ * @param data - The data to insert
+ * @param options - Additional options
+ * @returns The inserted data
  */
-async function insertData(table, data, options = {}) {
+async function insertData<T = any>(table: string, data: Record<string, any> | Record<string, any>[], options: InsertDataOptions = {}): Promise<T> {
   if (!serviceClient) {
     if (!initializeServiceClient()) {
       throw new Error('Supabase service client is not initialized');
@@ -221,6 +287,8 @@ async function insertData(table, data, options = {}) {
   }
 
   try {
+    if (!serviceClient) throw new Error('Service client initialization failed');
+
     const { data: result, error } = await serviceClient
       .from(table)
       .insert(data, { returning: options.returning || 'minimal' });
@@ -229,21 +297,21 @@ async function insertData(table, data, options = {}) {
       throw error;
     }
 
-    return result;
+    return result as T;
   } catch (error) {
     console.error(`Error inserting data into ${table}:`, error);
-    throw new Error(`Failed to insert data into ${table}: ${error.message}`);
+    throw new Error(`Failed to insert data into ${table}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Upsert data into a Supabase table (insert or update if exists)
- * @param {string} table - The table to upsert into
- * @param {Object|Array} data - The data to upsert
- * @param {Object} options - Additional options
- * @returns {Promise<Object>} The upserted data
+ * @param table - The table to upsert into
+ * @param data - The data to upsert
+ * @param options - Additional options
+ * @returns The upserted data
  */
-async function upsertData(table, data, options = {}) {
+async function upsertData<T = any>(table: string, data: Record<string, any> | Record<string, any>[], options: UpsertDataOptions = {}): Promise<T> {
   if (!serviceClient) {
     if (!initializeServiceClient()) {
       throw new Error('Supabase service client is not initialized');
@@ -251,6 +319,8 @@ async function upsertData(table, data, options = {}) {
   }
 
   try {
+    if (!serviceClient) throw new Error('Service client initialization failed');
+
     const { data: result, error } = await serviceClient
       .from(table)
       .upsert(data, { 
@@ -262,21 +332,21 @@ async function upsertData(table, data, options = {}) {
       throw error;
     }
 
-    return result;
+    return result as T;
   } catch (error) {
     console.error(`Error upserting data into ${table}:`, error);
-    throw new Error(`Failed to upsert data into ${table}: ${error.message}`);
+    throw new Error(`Failed to upsert data into ${table}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Update data in a Supabase table
- * @param {string} table - The table to update
- * @param {Object} data - The data to update
- * @param {Object} match - The condition to match records
- * @returns {Promise<Object>} The updated data
+ * @param table - The table to update
+ * @param data - The data to update
+ * @param match - The condition to match records
+ * @returns The updated data
  */
-async function updateData(table, data, match) {
+async function updateData<T = any>(table: string, data: Record<string, any>, match: Record<string, any>): Promise<T> {
   if (!serviceClient) {
     if (!initializeServiceClient()) {
       throw new Error('Supabase service client is not initialized');
@@ -284,6 +354,8 @@ async function updateData(table, data, match) {
   }
 
   try {
+    if (!serviceClient) throw new Error('Service client initialization failed');
+
     const { data: result, error } = await serviceClient
       .from(table)
       .update(data)
@@ -293,20 +365,20 @@ async function updateData(table, data, match) {
       throw error;
     }
 
-    return result;
+    return result as T;
   } catch (error) {
     console.error(`Error updating data in ${table}:`, error);
-    throw new Error(`Failed to update data in ${table}: ${error.message}`);
+    throw new Error(`Failed to update data in ${table}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Delete data from a Supabase table
- * @param {string} table - The table to delete from
- * @param {Object} match - The condition to match records
- * @returns {Promise<Object>} Result of the delete operation
+ * @param table - The table to delete from
+ * @param match - The condition to match records
+ * @returns Result of the delete operation
  */
-async function deleteData(table, match) {
+async function deleteData<T = any>(table: string, match: Record<string, any>): Promise<T> {
   if (!serviceClient) {
     if (!initializeServiceClient()) {
       throw new Error('Supabase service client is not initialized');
@@ -314,6 +386,8 @@ async function deleteData(table, match) {
   }
 
   try {
+    if (!serviceClient) throw new Error('Service client initialization failed');
+
     const { data, error } = await serviceClient
       .from(table)
       .delete()
@@ -323,18 +397,18 @@ async function deleteData(table, match) {
       throw error;
     }
 
-    return data;
+    return data as T;
   } catch (error) {
     console.error(`Error deleting data from ${table}:`, error);
-    throw new Error(`Failed to delete data from ${table}: ${error.message}`);
+    throw new Error(`Failed to delete data from ${table}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Check if Supabase is configured with valid credentials
- * @returns {boolean} True if Supabase is configured, false otherwise
+ * @returns True if Supabase is configured, false otherwise
  */
-function isConfigured() {
+function isConfigured(): boolean {
   return !!(
     config.SERVICES && 
     config.SERVICES.SUPABASE && 
@@ -347,15 +421,18 @@ function isConfigured() {
 initializeSupabase();
 initializeServiceClient();
 
-// Service client accessor - for backward compatibility
-function getServiceClient() {
+/**
+ * Service client accessor - for backward compatibility
+ * @returns The Supabase service client
+ */
+function getServiceClient(): SupabaseClient | null {
   if (!serviceClient) {
     initializeServiceClient();
   }
   return serviceClient;
 }
 
-module.exports = {
+export {
   getData,
   insertData,
   updateData,
@@ -366,4 +443,4 @@ module.exports = {
   toCategorizedArticle,
   getServiceClient,
   isConfigured
-};
+}; 

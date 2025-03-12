@@ -52,4 +52,7 @@ Thumbs.db
 # Debug files
 .node-version
 .npm
-.eslintcache 
+.eslintcache
+
+# TypeScript build output
+dist/ 

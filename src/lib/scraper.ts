@@ -1,22 +1,30 @@
-const { load } = require('cheerio');
-const puppeteer = require('puppeteer');
+import { load } from 'cheerio';
+import puppeteer from 'puppeteer';
 
 /**
- * @typedef {Object} Article
- * @property {string} title - Tytuł artykułu
- * @property {string} description - Opis artykułu
- * @property {string} price - Cena artykułu
- * @property {string} shippingPrice - Cena wysyłki
- * @property {string} image - URL obrazka
- * @property {string} link - Link do artykułu
+ * Interface representing an article from Pepper
  */
+export interface Article {
+  /** Title of the article */
+  title: string;
+  /** Description of the article */
+  description: string;
+  /** Price of the article */
+  price: string;
+  /** Shipping price of the article */
+  shippingPrice: string;
+  /** URL of the article image */
+  image: string;
+  /** Link to the article */
+  link: string;
+}
 
 /**
  * Downloads article data from pepper.pl for a specific page
- * @param {number} pageNumber - Numer strony do pobrania
- * @returns {Promise<Article[]|null>} - Tablica artykułów lub null w przypadku błędu
+ * @param pageNumber - Page number to download
+ * @returns Array of articles or null in case of error
  */
-async function scrapeArticlesFromPepper(pageNumber) {
+async function scrapeArticlesFromPepper(pageNumber: number): Promise<Article[] | null> {
   try {
     const url = `https://www.pepper.pl?page=${pageNumber}`;
 
@@ -40,11 +48,11 @@ async function scrapeArticlesFromPepper(pageNumber) {
       'Connection': 'keep-alive',
     });
 
-    const timeout = parseInt(process.env.SCRAPING_TIMEOUT) || 30000;
+    const timeout = parseInt(process.env.SCRAPING_TIMEOUT || '30000');
     page.setDefaultNavigationTimeout(timeout);
 
     console.log(`Navigating to ${url}...`);
-    const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: timeout });
+    const response = await page.goto(url, { waitUntil: 'networkidle0', timeout });
     if (!response || !response.ok()) {
       console.error(`Error response: ${response ? response.status() : 'No response'}`);
       await browser.close();
@@ -76,7 +84,7 @@ async function scrapeArticlesFromPepper(pageNumber) {
       return null;
     }
     
-    const elementsData = [];
+    const elementsData: Article[] = [];
     articles.each((_, elem) => {
       const threadListCardBody = $(elem).find('.threadListCard-body');
       const threadListCardImage = $(elem)
@@ -100,7 +108,7 @@ async function scrapeArticlesFromPepper(pageNumber) {
     });
 
     // Filter out null values
-    return elementsData.filter(article => article !== null);
+    return elementsData.filter((article): article is Article => article !== null);
   } catch (error) {
     console.error('Failed to download elements:', error);
     return null;
@@ -109,10 +117,10 @@ async function scrapeArticlesFromPepper(pageNumber) {
 
 /**
  * Extracts data from the HTML content of a thread card
- * @param {string} html - HTML content
- * @returns {Omit<Article, 'image'>|null} - Article data without image
+ * @param html - HTML content
+ * @returns Article data without image or null if extraction fails
  */
-function extractThreadCardData(html) {
+function extractThreadCardData(html: string): Omit<Article, 'image'> | null {
   const $ = load(html);
 
   // Find the thread link element
@@ -142,6 +150,6 @@ function extractThreadCardData(html) {
   return { link, title, price, shippingPrice, description };
 }
 
-module.exports = {
+export {
   scrapeArticlesFromPepper
 }; 

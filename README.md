@@ -9,10 +9,12 @@ Backend API service for fetching, categorizing, and caching offers from Pepper.p
 - **Caching System**: Local SQLite and Supabase caching for better performance
 - **RESTful API**: Clean API endpoints for accessing articles and categories
 - **Scheduled Tasks**: Automated cron jobs for fetching and categorizing articles
+- **TypeScript**: Strongly typed codebase for better developer experience and reliability
 
 ## Tech Stack
 
-- Node.js & Express
+- TypeScript & Node.js
+- Express
 - Supabase (PostgreSQL)
 - OpenAI API
 - SQLite (for local caching)
@@ -47,7 +49,12 @@ Backend API service for fetching, categorizing, and caching offers from Pepper.p
    
 4. Edit the `.env` file with your configuration values
 
-5. Run the development server:
+5. Build the project:
+   ```
+   npm run build
+   ```
+
+6. Run the development server:
    ```
    npm run dev
    ```
@@ -161,6 +168,24 @@ Articles are categorized into predefined categories:
 If OpenAI API is configured, the application will use it for more accurate categorization. Otherwise, it falls back to keyword-based categorization.
 
 ## Development
+
+### TypeScript
+
+This project uses TypeScript for improved type safety and developer experience. The main benefits include:
+
+- **Static Type Checking**: Catch type-related errors during development
+- **Better IDE Support**: Enhanced code completion and documentation
+- **Improved Readability**: Explicit type annotations make the code more self-documenting
+- **Safer Refactoring**: Type checking helps ensure changes don't break existing functionality
+
+### Available Scripts
+
+- `npm run build` - Compile TypeScript to JavaScript
+- `npm run dev` - Run the development server with hot reloading
+- `npm run start` - Run the production server (requires build first)
+- `npm run lint` - Run eslint to check for code issues
+- `npm run clean` - Remove the dist directory
+- `npm test` - Run tests
 
 ### Running in Development Mode
 

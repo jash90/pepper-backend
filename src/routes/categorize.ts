@@ -1,6 +1,17 @@
-const express = require('express');
+import express, { Request, Response } from 'express';
+import * as categorizeService from '../services/categorizeService';
+import { Article } from '../types';
+
 const router = express.Router();
-const categorizeService = require('../services/categorizeService');
+
+interface CategorizeRequestBody {
+  articles: Article[];
+  options?: {
+    useAI?: boolean;
+    saveToSupabase?: boolean;
+    [key: string]: any;
+  };
+}
 
 /**
  * @route POST /api/categorize
@@ -9,7 +20,7 @@ const categorizeService = require('../services/categorizeService');
  * @body {Array} articles - Artykuły do kategoryzacji
  * @body {Object} options - Opcje kategoryzacji
  */
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request<{}, {}, CategorizeRequestBody>, res: Response) => {
   try {
     const { articles, options = {} } = req.body;
     
@@ -40,8 +51,8 @@ router.post('/', async (req, res) => {
  * @desc Returns predefined categories
  * @access Public
  */
-router.get('/categories', (req, res) => {
+router.get('/categories', (_req: Request, res: Response) => {
   res.json({ categories: categorizeService.getCategories() });
 });
 
-module.exports = router; 
+export default router; 

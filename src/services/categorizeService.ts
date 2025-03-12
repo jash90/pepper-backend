@@ -1,6 +1,7 @@
-const openaiService = require('./openai');
-const supabaseService = require('./supabase');
-const config = require('../config');
+import * as openaiService from './openai';
+import * as supabaseService from './supabase';
+import config from '../config';
+import { Article } from '../lib/scraper';
 
 // Predefined categories that we want the AI to use
 const predefinedCategories = [
@@ -16,19 +17,44 @@ const predefinedCategories = [
   'Automotive',
   'Services',
   'Other Deals'
-];
+] as const;
+
+export type Category = typeof predefinedCategories[number];
+
+export interface CategorizeOptions {
+  /** Whether to use AI for categorization */
+  useAI?: boolean;
+  /** Whether to save to Supabase */
+  saveToSupabase?: boolean;
+}
+
+export interface CacheCheckResult {
+  /** Articles that were found in the cache, organized by category */
+  cachedArticles: Record<string, Article[]>;
+  /** Articles that were not found in the cache */
+  uncachedArticles: Article[];
+  /** IDs of articles that were found in the cache */
+  cachedArticleIds: string[];
+}
+
+export interface CategorizeResult {
+  /** Categorized articles organized by category */
+  categorizedArticles: Record<string, Article[]>;
+  /** Whether all articles were from cache */
+  fromCache: boolean;
+}
 
 // Helper function to create a unique ID for an article based on its link
-function createArticleId(link) {
+function createArticleId(link: string): string {
   return supabaseService.createUniqueId(link);
 }
 
 /**
  * Categorizes an article using OpenAI
- * @param {Object} article - Article to categorize
- * @returns {Promise<string>} - Category name
+ * @param article - Article to categorize
+ * @returns Category name
  */
-async function categorizeArticleWithAI(article) {
+async function categorizeArticleWithAI(article: Article): Promise<Category> {
   try {
     const { title, description, price } = article;
     
@@ -52,8 +78,8 @@ Respond with ONLY the category name, nothing else.
     });
     
     // Validate that the returned category is in our predefined list
-    if (predictedCategory && predefinedCategories.includes(predictedCategory)) {
-      return predictedCategory;
+    if (predictedCategory && predefinedCategories.includes(predictedCategory as Category)) {
+      return predictedCategory as Category;
     }
     
     // If the model returns something not in our list, default to Other Deals
@@ -67,12 +93,12 @@ Respond with ONLY the category name, nothing else.
 
 /**
  * Fallback categorization method using keywords 
- * @param {Object} article - Article to categorize
- * @returns {string} - Category name
+ * @param article - Article to categorize
+ * @returns Category name
  */
-function categorizeArticleWithKeywords(article) {
+function categorizeArticleWithKeywords(article: Article): Category {
   // Define main keywords for each category
-  const categoryKeywords = {
+  const categoryKeywords: Record<Category, string[]> = {
     'Electronics': [
       'phone', 'smartphone', 'iphone', 'samsung', 'laptop', 'computer', 'pc', 'monitor', 'tv', 'television', 
       'smart', 'electronic', 'device', 'gadget', 'tech', 'speaker', 'headphone', 'earbuds', 'audio', 'video', 
@@ -140,11 +166,11 @@ function categorizeArticleWithKeywords(article) {
 
   const textToAnalyze = `${article.title.toLowerCase()} ${article.description.toLowerCase()}`;
   
-  let bestCategory = 'Other Deals';
+  let bestCategory: Category = 'Other Deals';
   let maxMatches = 0;
   
   // Check each category's keywords against the text
-  for (const [category, keywords] of Object.entries(categoryKeywords)) {
+  for (const [category, keywords] of Object.entries(categoryKeywords) as [Category, string[]][]) {
     if (category === 'Other Deals') continue; // Skip the default category in matching
     
     // Count how many keywords of this category appear in the text
@@ -162,14 +188,10 @@ function categorizeArticleWithKeywords(article) {
 
 /**
  * Checks Supabase cache for already categorized articles
- * @param {Object[]} articles - Articles to check
- * @returns {Promise<{
- *   cachedArticles: Record<string, Object[]>;
- *   uncachedArticles: Object[];
- *   cachedArticleIds: string[];
- * }>} - Cached and uncached articles
+ * @param articles - Articles to check
+ * @returns Cached and uncached articles
  */
-async function checkCache(articles) {
+async function checkCache(articles: Article[]): Promise<CacheCheckResult> {
   if (!supabaseService.isConfigured()) {
     console.log('Supabase not configured, skipping cache check')
     return { cachedArticles: {}, uncachedArticles: articles, cachedArticleIds: [] }
@@ -179,8 +201,8 @@ async function checkCache(articles) {
   const articleLinks = articles.map(article => article.link)
   const articleIds = articleLinks.map(createArticleId)
 
-  const cachedArticles = {}
-  const cachedArticleIds = []
+  const cachedArticles: Record<string, Article[]> = {}
+  const cachedArticleIds: string[] = []
 
   try {
     // Process in smaller batches to avoid query string length limitations
@@ -194,7 +216,7 @@ async function checkCache(articles) {
       try {
         console.log(`Checking cache for batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(articleIds.length/BATCH_SIZE)} with ${batchIds.length} articles`);
         
-        const data = await supabaseService.getData('categorized_articles', {
+        const data = await supabaseService.getData<supabaseService.CategorizedArticle>('categorized_articles', {
           filter: {
             column: 'article_id',
             operator: 'in',
@@ -249,11 +271,11 @@ async function checkCache(articles) {
 
 /**
  * Saves categorized articles to Supabase
- * @param {Object[]} articles - Articles to save
- * @param {Record<string, string>} articleCategories - Map of article links to categories
- * @returns {Promise<number>} - Number of saved articles
+ * @param articles - Articles to save
+ * @param articleCategories - Map of article links to categories
+ * @returns Number of saved articles
  */
-async function saveToSupabase(articles, articleCategories) {
+async function saveToSupabase(articles: Article[], articleCategories: Record<string, string>): Promise<number> {
   try {
     // Check if Supabase is configured
     if (!supabaseService.isConfigured()) {
@@ -317,14 +339,11 @@ async function saveToSupabase(articles, articleCategories) {
 
 /**
  * Categorizes articles using AI or keywords
- * @param {Object[]} articles - Articles to categorize
- * @param {Object} options - Options for categorization
- * @returns {Promise<{
- *   categorizedArticles: Record<string, Object[]>;
- *   fromCache: boolean;
- * }>} - Categorized articles
+ * @param articles - Articles to categorize
+ * @param options - Options for categorization
+ * @returns Categorized articles
  */
-async function categorizeArticles(articles, options = {}) {
+async function categorizeArticles(articles: Article[], options: CategorizeOptions = {}): Promise<CategorizeResult> {
   try {
     // Check if articles array is valid
     if (!articles || !Array.isArray(articles) || articles.length === 0) {
@@ -346,11 +365,11 @@ async function categorizeArticles(articles, options = {}) {
     }
     
     // Categorize uncached articles
-    const articleCategories = {};
-    const useAI = options.useAI !== false && config.OPENAI_API_KEY;
+    const articleCategories: Record<string, string> = {};
+    const useAI = options.useAI !== false && !!config.OPENAI_API_KEY;
     
     for (const article of uncachedArticles) {
-      let category;
+      let category: Category;
       
       if (useAI) {
         // Try AI categorization first
@@ -381,7 +400,7 @@ async function categorizeArticles(articles, options = {}) {
     }
     
     // Filter out empty categories
-    const nonEmptyCategories = {};
+    const nonEmptyCategories: Record<string, Article[]> = {};
     Object.keys(cachedArticles).forEach(category => {
       if (cachedArticles[category].length > 0) {
         nonEmptyCategories[category] = cachedArticles[category];
@@ -400,17 +419,17 @@ async function categorizeArticles(articles, options = {}) {
 
 /**
  * Get all predefined categories
- * @returns {string[]} - List of predefined categories
+ * @returns List of predefined categories
  */
-function getCategories() {
+function getCategories(): readonly string[] {
   return predefinedCategories;
 }
 
-module.exports = {
+export {
   categorizeArticles,
   categorizeArticleWithAI,
   categorizeArticleWithKeywords,
   checkCache,
   saveToSupabase,
   getCategories,
-};
+}; 

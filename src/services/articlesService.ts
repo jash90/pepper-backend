@@ -1,29 +1,91 @@
-const { scrapeArticlesFromPepper } = require('../lib/scraper');
-const supabaseService = require('./supabase');
-const cacheService = require('./cacheService');
-const config = require('../config');
+import { scrapeArticlesFromPepper, Article } from '../lib/scraper';
+import * as supabaseService from './supabase';
+import * as cacheService from './cacheService';
+import config from '../config';
+
+export interface CachedArticlesOptions {
+  /** Number of days of data to retrieve */
+  days?: number;
+  /** Maximum number of results */
+  limit?: number;
+  /** Whether to skip local cache */
+  skipLocalCache?: boolean;
+  /** Minimum number of cached articles required */
+  minCached?: number | null;
+}
+
+export interface FetchCategorizeOptions {
+  /** Maximum number of pages to fetch */
+  maxPages?: number;
+  /** Batch size for categorization */
+  batchSize?: number;
+  /** Base URL for the API */
+  apiBaseUrl?: string;
+}
+
+export interface CategorizedArticlesResult {
+  /** Collection of articles organized by category */
+  categorizedArticles: Record<string, Article[]>;
+  /** Statistics about the categorized articles */
+  stats: {
+    /** Total number of articles */
+    totalArticles: number;
+    /** Categories found */
+    categories: string[];
+    /** Number of categories */
+    categoriesCount: number;
+    /** Days of data retrieved */
+    daysRetrieved?: number;
+    /** Starting date for retrieved data */
+    fromDate?: string;
+    /** Whether data is from cache */
+    fromCache?: boolean;
+    /** Whether data is from local cache */
+    fromLocalCache?: boolean;
+    /** Minimum cached requirement stats */
+    minCachedRequirement?: string;
+    /** Number of pages fetched */
+    pagesFetched?: number;
+    /** Total number of categorized articles */
+    totalCategorized?: number;
+    /** Number of batches processed */
+    batchesProcessed?: number;
+    /** Number of articles from cache */
+    articlesFromCache?: number;
+    /** Number of articles newly saved to Supabase */
+    newlySavedToSupabase?: number;
+    /** Percentage of articles from cache */
+    percentFromCache?: number;
+  };
+  /** Whether the operation was successful */
+  success?: boolean;
+}
 
 /**
  * Fetch articles from Pepper.pl for a specific page
- * @param {number} pageNumber - The page number to fetch
- * @returns {Promise<Array>} Array of articles
+ * @param pageNumber - The page number to fetch
+ * @returns Array of articles
  */
-async function fetchArticlesFromPage(pageNumber = 1) {
+async function fetchArticlesFromPage(pageNumber = 1): Promise<Article[]> {
   try {
     console.log(`Fetching articles from page ${pageNumber}...`);
-    return await scrapeArticlesFromPepper(pageNumber);
+    const articles = await scrapeArticlesFromPepper(pageNumber);
+    if (!articles) {
+      throw new Error(`No articles returned from page ${pageNumber}`);
+    }
+    return articles;
   } catch (error) {
     console.error(`Error fetching articles from page ${pageNumber}:`, error);
-    throw new Error(`Failed to fetch articles from page ${pageNumber}: ${error.message}`);
+    throw new Error(`Failed to fetch articles from page ${pageNumber}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Fetch articles from multiple pages of Pepper.pl
- * @param {number} pagesToFetch - Number of pages to fetch
- * @returns {Promise<Array>} Array of articles from all pages
+ * @param pagesToFetch - Number of pages to fetch
+ * @returns Array of articles from all pages
  */
-async function fetchArticlesFromMultiplePages(pagesToFetch = 3) {
+async function fetchArticlesFromMultiplePages(pagesToFetch = 3): Promise<Article[]> {
   try {
     if (pagesToFetch > config.API.ARTICLES.MAX_PAGES) {
       throw new Error(`Maximum number of pages exceeded (max ${config.API.ARTICLES.MAX_PAGES})`);
@@ -31,14 +93,14 @@ async function fetchArticlesFromMultiplePages(pagesToFetch = 3) {
 
     console.log(`Fetching articles from ${pagesToFetch} pages...`);
     
-    const fetchPromises = [];
+    const fetchPromises: Promise<Article[]>[] = [];
     for (let i = 1; i <= pagesToFetch; i++) {
       fetchPromises.push(fetchArticlesFromPage(i));
     }
     
     const results = await Promise.all(fetchPromises);
     
-    let allArticles = [];
+    let allArticles: Article[] = [];
     results.forEach(result => {
       if (result && Array.isArray(result)) {
         allArticles = [...allArticles, ...result];
@@ -58,13 +120,10 @@ async function fetchArticlesFromMultiplePages(pagesToFetch = 3) {
 
 /**
  * Get cached articles from local cache or Supabase
- * @param {Object} options - Options for retrieving cached articles
- * @param {number} options.days - Number of days of data to retrieve
- * @param {number} options.limit - Maximum number of results
- * @param {boolean} options.skipLocalCache - Whether to skip local cache
- * @returns {Promise<Object>} Categorized articles and stats
+ * @param options - Options for retrieving cached articles
+ * @returns Categorized articles and stats
  */
-async function getCachedArticles(options = {}) {
+async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<CategorizedArticlesResult> {
   const days = options.days || config.CACHE.DEFAULTS.DAYS_TO_CACHE;
   const limit = options.limit || config.CACHE.DEFAULTS.MAX_RESULTS;
   const skipLocalCache = options.skipLocalCache || false;
@@ -82,7 +141,7 @@ async function getCachedArticles(options = {}) {
   const CACHE_EXPIRATION = config.CACHE.DEFAULTS.TTL;
   
   // 1. Check local SQLite cache first unless skipLocalCache is true
-  let cachedResult = null;
+  let cachedResult: CategorizedArticlesResult | null = null;
   if (!skipLocalCache) {
     console.log('Checking local SQLite cache...');
     try {
@@ -118,7 +177,7 @@ async function getCachedArticles(options = {}) {
   const oldestDateIso = oldestDate.toISOString();
   
   try {
-    const data = await supabaseService.getData('categorized_articles', {
+    const data = await supabaseService.getData<supabaseService.CategorizedArticle>('categorized_articles', {
       filter: {
         column: 'created_at',
         operator: 'gte',
@@ -132,7 +191,7 @@ async function getCachedArticles(options = {}) {
     });
     
     // Convert Supabase records to our application's format
-    const categorizedArticles = {};
+    const categorizedArticles: Record<string, Article[]> = {};
     
     (data || []).forEach((cachedArticle) => {
       const article = supabaseService.toArticle(cachedArticle);
@@ -150,7 +209,7 @@ async function getCachedArticles(options = {}) {
     const categories = Object.keys(categorizedArticles);
     
     // Prepare the response
-    const result = {
+    const result: CategorizedArticlesResult = {
       categorizedArticles,
       stats: {
         totalArticles,
@@ -179,19 +238,16 @@ async function getCachedArticles(options = {}) {
     return result;
   } catch (error) {
     console.error('Error querying Supabase:', error);
-    throw new Error(`Failed to fetch cached articles: ${error.message}`);
+    throw new Error(`Failed to fetch cached articles: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Fetch, categorize, and cache articles from Pepper.pl
- * @param {Object} options - Options for the fetch and cache operation
- * @param {number} options.maxPages - Maximum number of pages to fetch
- * @param {number} options.batchSize - Batch size for categorization
- * @param {string} options.apiBaseUrl - Base URL for the API
- * @returns {Promise<Object>} Categorized articles and stats
+ * @param options - Options for the fetch and cache operation
+ * @returns Categorized articles and stats
  */
-async function fetchCategorizeAndCacheArticles(options = {}) {
+async function fetchCategorizeAndCacheArticles(options: FetchCategorizeOptions = {}): Promise<CategorizedArticlesResult> {
   const maxPages = options.maxPages || config.API.ARTICLES.MAX_PAGES;
   const batchSize = options.batchSize || config.API.CATEGORIZATION.MAX_BATCH_SIZE;
   const apiBaseUrl = options.apiBaseUrl || '';
@@ -204,8 +260,8 @@ async function fetchCategorizeAndCacheArticles(options = {}) {
   console.log(`Fetching ${maxPages} pages from Pepper.pl...`);
   
   // 1. Fetch articles from specified number of Pepper pages
-  let allArticles = [];
-  const fetchPromises = [];
+  let allArticles: Article[] = [];
+  const fetchPromises: Promise<Article[]>[] = [];
   
   // Create an array of promises to fetch all pages in parallel
   for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
@@ -246,7 +302,7 @@ async function fetchCategorizeAndCacheArticles(options = {}) {
   console.log(`Categorizing articles and saving to Supabase in batches of ${batchSize}...`);
   
   // Create batches of articles
-  const batches = [];
+  const batches: Article[][] = [];
   for (let i = 0; i < allArticles.length; i += batchSize) {
     batches.push(allArticles.slice(i, i + batchSize));
   }
@@ -254,7 +310,7 @@ async function fetchCategorizeAndCacheArticles(options = {}) {
   console.log(`Created ${batches.length} batches for categorization and caching`);
   
   // Process each batch - each batch will be categorized and saved to Supabase
-  let allCategorizedArticles = {};
+  let allCategorizedArticles: Record<string, Article[]> = {};
   let totalFromCache = 0;
   let newlySavedToSupabase = 0;
   
@@ -341,9 +397,9 @@ async function fetchCategorizeAndCacheArticles(options = {}) {
   };
 }
 
-module.exports = {
+export {
   fetchArticlesFromPage,
   fetchArticlesFromMultiplePages,
   getCachedArticles,
   fetchCategorizeAndCacheArticles,
-};
+}; 

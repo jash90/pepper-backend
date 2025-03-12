@@ -1,6 +1,20 @@
-const express = require('express');
+import express, { Request, Response } from 'express';
+import * as articlesService from '../services/articlesService';
+
 const router = express.Router();
-const articlesService = require('../services/articlesService');
+
+// Define request query interface for articles routes
+interface ArticlesRequestQuery {
+  page?: string;
+  pages?: string;
+  maxPages?: string;
+  batchSize?: string;
+  days?: string;
+  limit?: string;
+  minCached?: string;
+  fallbackPages?: string;
+  skipLocalCache?: string;
+}
 
 /**
  * @route GET /api/articles
@@ -8,10 +22,10 @@ const articlesService = require('../services/articlesService');
  * @access Public
  * @query {number} page - Numer strony do pobrania
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
   try {
     // Get the page number from the query string, default to 1
-    const pageNumber = parseInt(req.query.page, 10) || 1;
+    const pageNumber = parseInt(req.query.page || '1', 10);
     
     // Fetch articles from pepper.pl using the service
     const articles = await articlesService.fetchArticlesFromPage(pageNumber);
@@ -33,9 +47,9 @@ router.get('/', async (req, res) => {
  * @access Public
  * @query {number} pages - Liczba stron do pobrania (domyślnie 3)
  */
-router.get('/multi', async (req, res) => {
+router.get('/multi', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
   try {
-    const pagesToFetch = parseInt(req.query.pages, 10) || 3;
+    const pagesToFetch = parseInt(req.query.pages || '3', 10);
     
     if (pagesToFetch > 10) {
       return res.status(400).json({
@@ -68,7 +82,7 @@ router.get('/multi', async (req, res) => {
  * @query {number} maxPages - Opcjonalny limit maksymalnej liczby stron (domyślnie 10)
  * @query {number} batchSize - Rozmiar paczki artykułów do kategoryzacji (domyślnie 50)
  */
-router.get('/fetch-categorize-cache', async (req, res) => {
+router.get('/fetch-categorize-cache', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
   try {
     // Default to 10 pages (all pages) but allow override with maxPages parameter
     const maxPages = req.query.maxPages ? parseInt(req.query.maxPages, 10) : 10;
@@ -105,12 +119,12 @@ router.get('/fetch-categorize-cache', async (req, res) => {
  * @query {number} fallbackPages - Liczba stron do pobrania w przypadku fallbacku (domyślnie 7)
  * @query {boolean} skipLocalCache - Czy pominąć lokalny cache SQLite (domyślnie false)
  */
-router.get('/cached', async (req, res) => {
+router.get('/cached', async (req: Request<{}, {}, {}, ArticlesRequestQuery>, res: Response) => {
   try {
-    const days = parseInt(req.query.days, 10) || 7;
-    const limit = parseInt(req.query.limit, 10) || 500;
+    const days = parseInt(req.query.days || '7', 10);
+    const limit = parseInt(req.query.limit || '500', 10);
     const minCached = req.query.minCached ? parseInt(req.query.minCached, 10) : null;
-    const fallbackPages = parseInt(req.query.fallbackPages, 10) || 7;
+    const fallbackPages = parseInt(req.query.fallbackPages || '7', 10);
     const skipLocalCache = req.query.skipLocalCache === 'true';
     
     if (limit > 1000) {
@@ -144,4 +158,4 @@ router.get('/cached', async (req, res) => {
   }
 });
 
-module.exports = router; 
+export default router; 

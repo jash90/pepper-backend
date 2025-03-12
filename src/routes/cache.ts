@@ -1,6 +1,21 @@
-const express = require('express');
+import express, { Request, Response } from 'express';
+import { serviceClient, createUniqueId, toArticle } from '../lib/supabase';
+import { Article } from '../types';
+
 const router = express.Router();
-const { serviceClient, createUniqueId, toArticle } = require('../lib/supabase');
+
+// Define interface for request query parameters
+interface CacheQueryParams {
+  days?: string;
+  limit?: string;
+  mode?: string;
+  category?: string;
+}
+
+// Define interface for lookup request body
+interface LookupRequestBody {
+  links: string[];
+}
 
 /**
  * @route GET /api/cache/lookup
@@ -8,7 +23,7 @@ const { serviceClient, createUniqueId, toArticle } = require('../lib/supabase');
  * @access Public
  * @body {string[]} links - Article links to check
  */
-router.post('/lookup', async (req, res) => {
+router.post('/lookup', async (req: Request<{}, {}, LookupRequestBody>, res: Response) => {
   try {
     const { links } = req.body;
     
@@ -30,7 +45,7 @@ router.post('/lookup', async (req, res) => {
     
     // Process in batches to avoid potential Supabase limitations
     const batchSize = 100;
-    let allData = [];
+    let allData: any[] = [];
     
     for (let i = 0; i < articleIds.length; i += batchSize) {
       const batchIds = articleIds.slice(i, i + batchSize);
@@ -51,7 +66,7 @@ router.post('/lookup', async (req, res) => {
     }
     
     // Convert Supabase records to our application's format
-    const cachedArticles = {};
+    const cachedArticles: Record<string, Article[]> = {};
     
     allData.forEach((cachedArticle) => {
       const article = toArticle(cachedArticle);
@@ -87,10 +102,10 @@ router.post('/lookup', async (req, res) => {
  * @query {number} days - Number of days of data to retrieve (default: 7)
  * @query {number} limit - Maximum number of results to return (default: 500)
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request<{}, {}, {}, CacheQueryParams>, res: Response) => {
   try {
-    const days = parseInt(req.query.days, 10) || 7;
-    const limit = parseInt(req.query.limit, 10) || 500;
+    const days = parseInt(req.query.days || '7', 10);
+    const limit = parseInt(req.query.limit || '500', 10);
     
     if (limit > 1000) {
       return res.status(400).json({
@@ -127,7 +142,7 @@ router.get('/', async (req, res) => {
     }
     
     // Convert Supabase records to our application's format
-    const categorizedArticles = {};
+    const categorizedArticles: Record<string, Article[]> = {};
     
     (data || []).forEach((cachedArticle) => {
       const article = toArticle(cachedArticle);
@@ -169,10 +184,10 @@ router.get('/', async (req, res) => {
  * @query {string} mode - Purge mode: "all" or "older_than_days" (default: "older_than_days")
  * @query {number} days - For older_than_days mode, delete records older than this many days (default: 30)
  */
-router.delete('/purge', async (req, res) => {
+router.delete('/purge', async (req: Request<{}, {}, {}, CacheQueryParams>, res: Response) => {
   try {
     const mode = req.query.mode || 'older_than_days';
-    const days = parseInt(req.query.days, 10) || 30;
+    const days = parseInt(req.query.days || '30', 10);
     
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -238,7 +253,7 @@ router.delete('/purge', async (req, res) => {
  * @desc Get statistics about the cache
  * @access Public
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', async (req: Request, res: Response) => {
   try {
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -253,71 +268,62 @@ router.get('/stats', async (req, res) => {
       .select('*', { count: 'exact', head: true });
       
     if (countError) {
-      console.error('Error getting total count:', countError);
+      console.error('Error getting cache count:', countError);
       return res.status(500).json({
         error: 'Failed to get cache statistics'
       });
     }
     
-    // Get counts by category
+    // Get category counts
     const { data: categoryData, error: categoryError } = await serviceClient
       .from('categorized_articles')
       .select('category');
       
     if (categoryError) {
-      console.error('Error getting categories:', categoryError);
+      console.error('Error getting category stats:', categoryError);
       return res.status(500).json({
-        error: 'Failed to get cache statistics'
+        error: 'Failed to get category statistics'
       });
     }
     
-    // Count occurrences of each category
-    const categoryCounts = {};
-    (categoryData || []).forEach(item => {
+    // Count articles by category
+    const categoryCounts: Record<string, number> = {};
+    
+    categoryData?.forEach((item) => {
       const category = item.category;
       categoryCounts[category] = (categoryCounts[category] || 0) + 1;
     });
     
-    // Get the oldest and newest entry
+    // Get oldest record
     const { data: oldestData, error: oldestError } = await serviceClient
       .from('categorized_articles')
       .select('created_at')
       .order('created_at', { ascending: true })
-      .limit(1);
+      .limit(1)
+      .single();
       
-    if (oldestError) {
-      console.error('Error getting oldest entry:', oldestError);
+    if (oldestError && oldestError.code !== 'PGRST116') { // PGRST116 is "No rows returned" error
+      console.error('Error getting oldest record:', oldestError);
     }
     
+    // Get newest record
     const { data: newestData, error: newestError } = await serviceClient
       .from('categorized_articles')
       .select('created_at')
       .order('created_at', { ascending: false })
-      .limit(1);
+      .limit(1)
+      .single();
       
-    if (newestError) {
-      console.error('Error getting newest entry:', newestError);
-    }
-    
-    const oldestEntry = oldestData && oldestData[0] ? oldestData[0].created_at : null;
-    const newestEntry = newestData && newestData[0] ? newestData[0].created_at : null;
-    
-    // Calculate the age of the cache in days
-    let cacheAgeInDays = null;
-    if (oldestEntry) {
-      const oldestDate = new Date(oldestEntry);
-      const currentDate = new Date();
-      const diffTime = Math.abs(currentDate - oldestDate);
-      cacheAgeInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (newestError && newestError.code !== 'PGRST116') {
+      console.error('Error getting newest record:', newestError);
     }
     
     return res.status(200).json({
-      totalEntries: totalCount,
-      categoryBreakdown: categoryCounts,
-      categoryCount: Object.keys(categoryCounts).length,
-      oldestEntry,
-      newestEntry,
-      cacheAgeInDays
+      totalArticles: totalCount,
+      categories: Object.keys(categoryCounts),
+      categoryCounts,
+      oldestRecord: oldestData?.created_at || null,
+      newestRecord: newestData?.created_at || null
     });
   } catch (error) {
     console.error('Error getting cache stats:', error);
@@ -327,4 +333,71 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-module.exports = router; 
+/**
+ * @route GET /api/cache/category/:category
+ * @desc Get categorized articles from a specific category
+ * @access Public
+ * @param {string} category - Category to filter by
+ * @query {number} days - Number of days of data to retrieve (default: 7)
+ * @query {number} limit - Maximum number of results to return (default: 500)
+ */
+router.get('/category/:category', async (req: Request<{category: string}, {}, {}, CacheQueryParams>, res: Response) => {
+  try {
+    const { category } = req.params;
+    const days = parseInt(req.query.days || '7', 10);
+    const limit = parseInt(req.query.limit || '500', 10);
+    
+    if (limit > 1000) {
+      return res.status(400).json({
+        error: 'Invalid request: limit must be less than or equal to 1000'
+      });
+    }
+    
+    // Check if Supabase is configured
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(503).json({
+        error: 'Cache service unavailable: Supabase not configured'
+      });
+    }
+    
+    // Calculate the date for filtering
+    const oldestDate = new Date();
+    oldestDate.setDate(oldestDate.getDate() - days);
+    const oldestDateIso = oldestDate.toISOString();
+    
+    console.log(`Fetching ${category} articles from cache not older than ${days} days (from ${oldestDateIso})`);
+    
+    const { data, error } = await serviceClient
+      .from('categorized_articles')
+      .select('*')
+      .eq('category', category)
+      .gte('created_at', oldestDateIso)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+      
+    if (error) {
+      console.error(`Supabase query error for category ${category}:`, error);
+      return res.status(500).json({
+        error: 'Error querying cache'
+      });
+    }
+    
+    // Convert Supabase records to our application's format
+    const articles: Article[] = (data || []).map(cachedArticle => toArticle(cachedArticle));
+    
+    return res.status(200).json({
+      category,
+      articles,
+      count: articles.length,
+      daysRetrieved: days,
+      fromDate: oldestDateIso
+    });
+  } catch (error) {
+    console.error('Error in category cache retrieval:', error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
+    });
+  }
+});
+
+export default router; 

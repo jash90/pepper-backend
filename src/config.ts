@@ -3,8 +3,11 @@
  * Centralizes all configuration settings and provides sensible defaults
  */
 
+import dotenv from 'dotenv';
+import { AppConfig } from './types';
+
 // Load environment variables
-require('dotenv').config();
+dotenv.config();
 
 // Cache configuration
 const CACHE = {
@@ -22,13 +25,13 @@ const CACHE = {
   // Cleanup configuration
   CLEANUP: {
     // Interval for cache cleanup in milliseconds (default: 15 minutes)
-    INTERVAL_MS: parseInt(process.env.CACHE_CLEANUP_INTERVAL_MS, 10) || 15 * 60 * 1000,
+    INTERVAL_MS: parseInt(process.env.CACHE_CLEANUP_INTERVAL_MS || '900000', 10),
     // Maximum age of cached data in seconds (default: 1 hour)
-    EXPIRATION_SECONDS: parseInt(process.env.CACHE_EXPIRATION_SECONDS, 10) || 60 * 60
+    EXPIRATION_SECONDS: parseInt(process.env.CACHE_EXPIRATION_SECONDS || '3600', 10)
   },
   // Default values for cache-related operations
   DEFAULTS: {
-    TTL: parseInt(process.env.CACHE_EXPIRATION, 10) || 3600, // Default 1 hour in seconds
+    TTL: parseInt(process.env.CACHE_EXPIRATION || '3600', 10), // Default 1 hour in seconds
     DAYS_TO_CACHE: 7,
     MAX_RESULTS: 500
   }
@@ -37,7 +40,7 @@ const CACHE = {
 // Server configuration
 const SERVER = {
   // Port to listen on
-  PORT: process.env.PORT || 3000,
+  PORT: parseInt(process.env.PORT || '5001', 10),
   // Node environment
   NODE_ENV: process.env.NODE_ENV || 'development',
   // CORS origins
@@ -51,7 +54,7 @@ const SERVER = {
     ORIGIN: process.env.CORS_ORIGIN || '*',
   },
   // Base URL for the server (used for scheduled tasks)
-  BASE_URL: process.env.SERVER_BASE_URL || null
+  BASE_URL: process.env.SERVER_BASE_URL || 'http://localhost:5001'
 };
 
 // Scheduler configuration
@@ -63,7 +66,7 @@ const SCHEDULER = {
     // Enable/disable fetch-categorize scheduler
     ENABLED: process.env.ENABLE_FETCH_CATEGORIZE_SCHEDULER !== 'false', // Default to true
     // Maximum number of pages to fetch in scheduled job
-    MAX_PAGES: parseInt(process.env.SCHEDULER_FETCH_PAGES, 10) || 1,
+    MAX_PAGES: parseInt(process.env.SCHEDULER_FETCH_PAGES || '1', 10),
     // Whether to use AI for categorization in scheduled job
     USE_AI: process.env.SCHEDULER_USE_AI !== 'false', // Default to true
     // Cron expression for the scheduler (every 10 minutes by default)
@@ -74,21 +77,17 @@ const SCHEDULER = {
 // Third-party service configuration
 const SERVICES = {
   // Supabase configuration
-  SUPABASE: {
+  SUPABASE: process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY ? {
     URL: process.env.SUPABASE_URL,
     SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
-    ANON_KEY: process.env.SUPABASE_ANON_KEY,
-    // Check if Supabase is properly configured
-    IS_CONFIGURED: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
-  },
+    ANON_KEY: process.env.SUPABASE_ANON_KEY
+  } : undefined,
   // OpenAI configuration
-  OPENAI: {
+  OPENAI: process.env.OPENAI_API_KEY ? {
     API_KEY: process.env.OPENAI_API_KEY,
     ORGANIZATION: process.env.OPENAI_ORGANIZATION,
-    MODEL: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
-    // Check if OpenAI is properly configured
-    IS_CONFIGURED: !!process.env.OPENAI_API_KEY
-  }
+    MODEL: process.env.OPENAI_MODEL || 'gpt-3.5-turbo'
+  } : undefined
 };
 
 // API limits and defaults
@@ -108,7 +107,7 @@ const API = {
   CATEGORIZATION: {
     PROMPT: process.env.CATEGORIZATION_PROMPT || 
       'Categorize this product or deal into ONE of the following categories: Electronics, Fashion, Home & Garden, Beauty, Sports, Toys, Food & Beverages, Travel, Services, Other. RESPOND ONLY WITH THE CATEGORY NAME.',
-    MAX_BATCH_SIZE: parseInt(process.env.MAX_CATEGORIZATION_BATCH_SIZE, 10) || 50
+    MAX_BATCH_SIZE: parseInt(process.env.MAX_CATEGORIZATION_BATCH_SIZE || '50', 10)
   },
   // Scraper configuration
   SCRAPER: {
@@ -118,44 +117,47 @@ const API = {
 };
 
 // Debug & Development settings
-const DEBUG = {
+const DEBUG_SETTINGS = {
   ENABLED: process.env.DEBUG === 'true',
   VERBOSE_LOGGING: process.env.VERBOSE_LOGGING === 'true'
 };
 
 // Create a flat config for backward compatibility
-const flatConfig = {
+const config: AppConfig & Record<string, any> = {
   // Server configuration
   PORT: SERVER.PORT,
   NODE_ENV: SERVER.NODE_ENV,
+  CORS_ORIGIN: SERVER.CORS.ORIGIN,
+  SERVER_BASE_URL: SERVER.BASE_URL,
   
-  // API Keys
-  OPENAI_API_KEY: SERVICES.OPENAI.API_KEY,
-  OPENAI_ORGANIZATION: SERVICES.OPENAI.ORGANIZATION,
-  
-  // Supabase configuration
-  SUPABASE_URL: SERVICES.SUPABASE.URL,
-  SUPABASE_KEY: SERVICES.SUPABASE.ANON_KEY,
-  SUPABASE_SERVICE_KEY: SERVICES.SUPABASE.SERVICE_KEY,
+  // Services configuration
+  SERVICES,
   
   // Cache configuration
+  CACHE_CLEANUP_INTERVAL_MS: CACHE.CLEANUP.INTERVAL_MS,
+  CACHE_EXPIRATION_SECONDS: CACHE.CLEANUP.EXPIRATION_SECONDS,
+  
+  // Scheduler configuration
+  ENABLE_SCHEDULER: SCHEDULER.ENABLED,
+  ENABLE_FETCH_CATEGORIZE_SCHEDULER: SCHEDULER.FETCH_CATEGORIZE.ENABLED,
+  SCHEDULER_FETCH_PAGES: SCHEDULER.FETCH_CATEGORIZE.MAX_PAGES,
+  SCHEDULER_USE_AI: SCHEDULER.FETCH_CATEGORIZE.USE_AI,
+  FETCH_CATEGORIZE_CRON: SCHEDULER.FETCH_CATEGORIZE.CRON_EXPRESSION,
+  
+  // Additional properties for backward compatibility
+  OPENAI_API_KEY: SERVICES.OPENAI?.API_KEY,
+  OPENAI_ORGANIZATION: SERVICES.OPENAI?.ORGANIZATION,
+  SUPABASE_URL: SERVICES.SUPABASE?.URL,
+  SUPABASE_KEY: SERVICES.SUPABASE?.ANON_KEY,
+  SUPABASE_SERVICE_KEY: SERVICES.SUPABASE?.SERVICE_KEY,
   USE_SQLITE_CACHE: CACHE.SQLITE.ENABLED,
   CACHE_EXPIRATION: CACHE.DEFAULTS.TTL,
-  
-  // Scraper configuration
   PEPPER_BASE_URL: API.SCRAPER.BASE_URL,
   SCRAPER_USER_AGENT: API.SCRAPER.USER_AGENT,
-  
-  // CORS configuration
-  CORS_ORIGIN: SERVER.CORS.ORIGIN,
-  
-  // Article categorization
   CATEGORIZATION_PROMPT: API.CATEGORIZATION.PROMPT,
   MAX_CATEGORIZATION_BATCH_SIZE: API.CATEGORIZATION.MAX_BATCH_SIZE,
-  
-  // Debug & Development
-  DEBUG: DEBUG.ENABLED,
-  VERBOSE_LOGGING: DEBUG.VERBOSE_LOGGING,
+  DEBUG: DEBUG_SETTINGS.ENABLED,
+  VERBOSE_LOGGING: DEBUG_SETTINGS.VERBOSE_LOGGING,
   
   // Default values for various operations
   DEFAULTS: {
@@ -166,21 +168,12 @@ const flatConfig = {
     MAX_RESULTS: CACHE.DEFAULTS.MAX_RESULTS,
   },
   
-  // Scheduler configuration
-  ENABLE_SCHEDULER: SCHEDULER.ENABLED,
-  ENABLE_FETCH_CATEGORIZE_SCHEDULER: SCHEDULER.FETCH_CATEGORIZE.ENABLED,
-  SCHEDULER_FETCH_PAGES: SCHEDULER.FETCH_CATEGORIZE.MAX_PAGES,
-  SCHEDULER_USE_AI: SCHEDULER.FETCH_CATEGORIZE.USE_AI,
-  FETCH_CATEGORIZE_CRON: SCHEDULER.FETCH_CATEGORIZE.CRON_EXPRESSION,
-};
-
-// Export the configuration in both structured and flat formats
-module.exports = {
-  ...flatConfig, // For backward compatibility
+  // Structured configuration objects
   CACHE,
   SERVER,
-  SERVICES,
   API,
-  DEBUG,
+  DEBUG: DEBUG_SETTINGS,
   SCHEDULER
 };
+
+export default config; 

@@ -1,143 +1,179 @@
-# Pepper Backend API
+# Pepper Backend
 
-Backend API dla aplikacji wyświetlającej i kategoryzującej oferty z serwisu Pepper.pl, używający OpenAI do kategoryzacji i Supabase do cache.
+Backend API service for fetching, categorizing, and caching offers from Pepper.pl. The service uses AI to automatically categorize articles into predefined categories and stores them in Supabase for quick retrieval.
 
-## Funkcje
+## Features
 
-- Pobieranie artykułów z Pepper.pl przez scraping
-- Kategoryzacja artykułów przy pomocy OpenAI lub dopasowywania słów kluczowych
-- Cache kategoryzowanych artykułów w Supabase
-- Obsługa polityk Row Level Security (RLS) w Supabase
-- Statystyki i zarządzanie cache
+- **Article Scraping**: Fetch latest deals from Pepper.pl
+- **AI Categorization**: Automatically categorize articles using OpenAI
+- **Caching System**: Local SQLite and Supabase caching for better performance
+- **RESTful API**: Clean API endpoints for accessing articles and categories
+- **Scheduled Tasks**: Automated cron jobs for fetching and categorizing articles
 
-## Wymagania
+## Tech Stack
 
-- Node.js >= 18.0.0
-- Konto w [Supabase](https://supabase.com/)
-- Opcjonalnie: Klucz API do [OpenAI](https://openai.com/)
+- Node.js & Express
+- Supabase (PostgreSQL)
+- OpenAI API
+- SQLite (for local caching)
+- node-cron (for scheduled tasks)
 
-## Instalacja
+## Installation
 
-```bash
-# Klonowanie repozytorium (jeśli nie zostało już sklonowane)
-git clone <repozytorium>
-cd pepper-backend
+### Prerequisites
 
-# Instalacja zależności
-npm install
+- Node.js (v18+)
+- npm (v9+)
+- Supabase account (optional, for persistent storage)
+- OpenAI API key (optional, for AI categorization)
 
-# Skopiowanie pliku .env.example do .env
-cp .env.example .env
+### Setup
 
-# Edycja pliku .env i dodanie wymaganych kluczy
-nano .env
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/pepper-backend.git
+   cd pepper-backend
+   ```
+
+2. Install dependencies:
+   ```
+   npm install
+   ```
+
+3. Create a `.env` file based on `.env.example`:
+   ```
+   cp .env.example .env
+   ```
+   
+4. Edit the `.env` file with your configuration values
+
+5. Run the development server:
+   ```
+   npm run dev
+   ```
+
+## Configuration
+
+The application is configured through environment variables (see `.env.example`). Key configuration options:
+
+### Supabase (Optional)
 ```
-
-## Konfiguracja
-
-W pliku `.env` należy ustawić następujące zmienne środowiskowe:
-
-```ini
-# Supabase
 SUPABASE_URL=https://your-project-url.supabase.co
 SUPABASE_SERVICE_KEY=your-service-key
 SUPABASE_ANON_KEY=your-anon-key
+```
 
-# OpenAI (opcjonalnie, jeśli ma być używana kategoryzacja AI)
+### OpenAI (Optional)
+```
 OPENAI_API_KEY=your-openai-api-key
+```
 
-# Ustawienia aplikacji
-PORT=5000
+### Server Settings
+```
+PORT=5001
 NODE_ENV=development
-CORS_ORIGIN=http://localhost:3000
+CORS_ORIGIN=http://localhost:3006
+SERVER_BASE_URL=http://localhost:5001
 ```
 
-## Utworzenie tabeli w Supabase
-
-W projekcie Supabase należy utworzyć tabelę `categorized_articles` o następującej strukturze:
-
-```sql
-CREATE TABLE categorized_articles (
-  article_id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  price TEXT,
-  shipping_price TEXT,
-  image TEXT,
-  link TEXT NOT NULL,
-  category TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Indeks dla szybszego wyszukiwania
-CREATE INDEX categorized_articles_category_idx ON categorized_articles(category);
-CREATE INDEX categorized_articles_created_at_idx ON categorized_articles(created_at);
+### Scheduler Settings
+```
+ENABLE_SCHEDULER=true
+ENABLE_FETCH_CATEGORIZE_SCHEDULER=true
+SCHEDULER_FETCH_PAGES=1
+SCHEDULER_USE_AI=true
+FETCH_CATEGORIZE_CRON=*/10 * * * *
 ```
 
-## Uruchomienie
+## API Endpoints
 
-```bash
-# Tryb deweloperski z auto-restartowaniem
-npm run dev
+### Articles
 
-# Tryb produkcyjny
-npm start
-```
+- `GET /api/articles` - Fetch articles from Pepper.pl
+  - Query params: `maxPages` (default: 3)
 
-Serwer domyślnie działa na porcie 5000, chyba że PORT jest inaczej ustawiony w pliku `.env`.
+- `GET /api/articles/fetch-categorize-cache` - Fetch articles, categorize them, and cache the results
+  - Query params: `maxPages` (default: 1), `useAI` (default: true), `saveToSupabase` (default: true)
 
-## Endpointy API
+### Categories
 
-### Artykuły
-
-- `GET /api/articles` - Pobieranie artykułów z Pepper.pl z określonej strony
-  - Query Params: `page` (domyślnie 1)
-- `GET /api/articles/multi` - Pobieranie artykułów z wielu stron Pepper.pl
-  - Query Params: `pages` (domyślnie 3, max 10)
-
-### Kategoryzacja
-
-- `POST /api/categorize` - Kategoryzacja artykułów przy pomocy OpenAI lub słów kluczowych
-  - Request body: `{ articles: Article[] }`
-- `GET /api/categorize/categories` - Pobieranie listy dostępnych kategorii
+- `GET /api/categorize` - Categorize provided articles
+  - Body: `{ articles: [Article] }`
 
 ### Cache
 
-- `GET /api/cache` - Pobieranie skategoryzowanych artykułów z cache
-  - Query Params: `days` (domyślnie 7), `limit` (domyślnie 500, max 1000)
-- `POST /api/cache/lookup` - Sprawdzanie cache dla linków artykułów
-  - Request body: `{ links: string[] }`
-- `DELETE /api/cache/purge` - Usuwanie danych z cache
-  - Query Params: `mode` ('all' lub 'older_than_days'), `days` (domyślnie 30)
-- `GET /api/cache/stats` - Statystyki cache
+- `GET /api/cache` - Get all cached articles
+- `GET /api/cache/category/:category` - Get articles by category
 
 ### Supabase
 
-- `GET /api/supabase/check` - Sprawdzanie połączenia z Supabase
-- `POST /api/supabase/fix-rls` - Naprawianie polityk RLS (Row Level Security)
-- `GET /api/supabase/check-rls` - Sprawdzanie statusu polityk RLS
+- `GET /api/supabase/status` - Check Supabase connection status
 
-## Struktura projektu
+### Other
+
+- `GET /health` - Health check endpoint
+- `GET /` - API information
+
+## Scheduled Tasks
+
+The application includes scheduled tasks using node-cron:
+
+### Fetch and Categorize Articles
+
+A cron job that automatically fetches new articles from Pepper.pl, categorizes them using AI, and saves them to the cache at regular intervals (default: every 10 minutes).
+
+Configuration:
+```
+ENABLE_SCHEDULER=true                # Enable/disable all scheduled tasks
+ENABLE_FETCH_CATEGORIZE_SCHEDULER=true   # Enable/disable this specific task
+SCHEDULER_FETCH_PAGES=1              # Number of pages to fetch
+SCHEDULER_USE_AI=true                # Use AI for categorization
+FETCH_CATEGORIZE_CRON=*/10 * * * *   # Cron expression (every 10 minutes)
+```
+
+### Cache Cleanup
+
+A scheduled task that removes expired entries from the local cache to prevent it from growing too large.
+
+Configuration:
+```
+CACHE_CLEANUP_INTERVAL_MS=900000     # Run cleanup every 15 minutes
+CACHE_EXPIRATION_SECONDS=3600        # Expire cache entries after 1 hour
+```
+
+## Article Categorization
+
+Articles are categorized into predefined categories:
+
+- Electronics
+- Home & Household
+- Fashion
+- Food & Grocery
+- Sports & Outdoor
+- Beauty & Health
+- Travel
+- Entertainment
+- Kids & Toys
+- Automotive
+- Services
+- Other Deals
+
+If OpenAI API is configured, the application will use it for more accurate categorization. Otherwise, it falls back to keyword-based categorization.
+
+## Development
+
+### Running in Development Mode
 
 ```
-pepper-backend/
-├── src/
-│   ├── index.js            # Główny plik aplikacji
-│   ├── lib/                # Biblioteki i moduły
-│   │   ├── openai.js       # Klient OpenAI
-│   │   ├── scraper.js      # Scraper dla Pepper.pl
-│   │   └── supabase.js     # Klient Supabase
-│   └── routes/             # Routery Express dla endpointów API
-│       ├── articles.js     # Endpointy dla artykułów
-│       ├── cache.js        # Endpointy dla zarządzania cache
-│       ├── categorize.js   # Endpointy dla kategoryzacji
-│       └── supabase.js     # Endpointy dla zarządzania Supabase
-├── .env.example            # Przykładowy plik konfiguracyjny
-├── .gitignore              # Plik gitignore
-├── package.json            # Plik package.json
-└── README.md               # Ten plik README
+npm run dev
 ```
 
-## Licencja
+### Tests
+
+```
+npm test
+```
+
+## License
 
 MIT 

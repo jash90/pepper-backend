@@ -1,9 +1,10 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const config = require('./config');
 const { startCacheCleanup } = require('./lib/cacheCleanup');
+const { startScheduler } = require('./lib/scheduler');
 
 // Import routers
 const articlesRouter = require('./routes/articles');
@@ -13,7 +14,6 @@ const cacheRouter = require('./routes/cache');
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(helmet()); // Security headers
@@ -22,18 +22,11 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     
-    // Define allowed origins
+    // Define allowed origins using our structured config
     const allowedOrigins = [
-      'http://localhost:3000', 
-      'http://localhost:3006'
+      ...config.SERVER.CORS.DEFAULT_ORIGINS,
+      ...config.SERVER.CORS.ADDITIONAL_ORIGINS
     ];
-    
-    // Check if CORS_ORIGIN is set in env, add it to allowed origins
-    if (process.env.CORS_ORIGIN) {
-      // Split by comma if there are multiple origins in the env variable
-      const envOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
-      allowedOrigins.push(...envOrigins);
-    }
     
     // Check if the origin is allowed
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -55,7 +48,11 @@ app.use('/api/cache', cacheRouter);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: config.SERVER.NODE_ENV
+  });
 });
 
 // Root route
@@ -63,6 +60,7 @@ app.get('/', (req, res) => {
   res.status(200).json({
     message: 'Pepper.pl API Server',
     version: '1.0.0',
+    environment: config.SERVER.NODE_ENV,
     endpoints: [
       { path: '/api/articles', description: 'Fetch articles from Pepper.pl' },
       { path: '/api/categorize', description: 'Categorize articles with AI' },
@@ -77,16 +75,30 @@ app.get('/', (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
-    stack: process.env.NODE_ENV === 'production' ? '🥞' : err.stack
+    error: config.SERVER.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    stack: config.SERVER.NODE_ENV === 'production' ? '🥞' : err.stack
   });
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`http://localhost:${PORT}`);
+app.listen(config.SERVER.PORT, () => {
+  console.log(`Server running on port ${config.SERVER.PORT}`);
+  console.log(`http://localhost:${config.SERVER.PORT}`);
   
   // Start the cache cleanup scheduler
   startCacheCleanup();
+  
+  // Start the cron job scheduler if enabled
+  if (config.SCHEDULER.ENABLED) {
+    console.log('Starting scheduled tasks...');
+    const scheduledJobs = startScheduler();
+    console.log(`Scheduled ${Object.keys(scheduledJobs).length} job(s)`);
+    
+    // Log the specific jobs that were started
+    Object.keys(scheduledJobs).forEach(jobName => {
+      console.log(`- ${jobName}: Active`);
+    });
+  } else {
+    console.log('Scheduler is disabled. Set ENABLE_SCHEDULER=true to enable.');
+  }
 }); 

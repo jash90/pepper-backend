@@ -17,38 +17,39 @@ let dbType = 'none'; // Track which SQLite implementation we're using
  * Try to initialize better-sqlite3 first, then fallback to sqlite3 if it fails
  */
 function initializeDatabase() {
-  if (db) return { db, dbType };
+  // Already initialized
+  if (db) return Promise.resolve({ db, dbType });
 
-  try {
-    console.log(`Initializing SQLite cache database at ${dbPath}`);
-    
-    // Try better-sqlite3 first (faster but might have compatibility issues)
+  return new Promise((resolve, reject) => {
     try {
-      const BetterSQLite3 = require('better-sqlite3');
-      db = new BetterSQLite3(dbPath);
-      dbType = 'better-sqlite3';
-      console.log('Using better-sqlite3 for local caching (faster implementation)');
+      console.log(`Initializing SQLite cache database at ${dbPath}`);
       
-      // Create the tables and indexes
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS articles_cache (
-          request_hash TEXT PRIMARY KEY,
-          data TEXT NOT NULL,
-          created_at INTEGER NOT NULL
-        );
+      // Try better-sqlite3 first (faster but might have compatibility issues)
+      try {
+        const BetterSQLite3 = require('better-sqlite3');
+        db = new BetterSQLite3(dbPath);
+        dbType = 'better-sqlite3';
+        console.log('Using better-sqlite3 for local caching (faster implementation)');
         
-        CREATE INDEX IF NOT EXISTS idx_created_at ON articles_cache(created_at);
-      `);
-      
-      console.log('SQLite cache database initialized successfully with better-sqlite3');
-      return { db, dbType };
-    } catch (betterSqliteError) {
-      console.warn('Failed to initialize better-sqlite3, trying standard sqlite3 fallback:', betterSqliteError.message);
-      // If better-sqlite3 fails, fall back to regular sqlite3
-      const sqlite3 = require('sqlite3').verbose();
-      
-      // Create sqlite3 database and promisify operations
-      return new Promise((resolve, reject) => {
+        // Create the tables and indexes
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS articles_cache (
+            request_hash TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_created_at ON articles_cache(created_at);
+        `);
+        
+        console.log('SQLite cache database initialized successfully with better-sqlite3');
+        resolve({ db, dbType });
+      } catch (betterSqliteError) {
+        console.warn('Failed to initialize better-sqlite3, trying standard sqlite3 fallback:', betterSqliteError.message);
+        // If better-sqlite3 fails, fall back to regular sqlite3
+        const sqlite3 = require('sqlite3').verbose();
+        
+        // Create sqlite3 database
         db = new sqlite3.Database(dbPath, (err) => {
           if (err) {
             reject(err);
@@ -84,14 +85,14 @@ function initializeDatabase() {
             });
           });
         });
-      });
+      }
+    } catch (error) {
+      console.error('Error initializing SQLite cache:', error);
+      db = null;
+      dbType = 'none';
+      reject(error);
     }
-  } catch (error) {
-    console.error('Error initializing SQLite cache:', error);
-    db = null;
-    dbType = 'none';
-    return { db: null, dbType: 'none' };
-  }
+  });
 }
 
 /**
@@ -255,9 +256,13 @@ async function cleanupExpiredCache(maxAgeSeconds = 3600) {
 }
 
 // Initialize the database when the module is loaded
-initializeDatabase().catch(err => {
-  console.error('Failed to initialize SQLite database:', err);
-});
+initializeDatabase()
+  .then(() => {
+    console.log('SQLite cache initialized successfully during module load');
+  })
+  .catch(err => {
+    console.error('Failed to initialize SQLite database:', err);
+  });
 
 // Export the functions
 module.exports = {

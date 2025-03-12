@@ -1,19 +1,17 @@
 const { cleanupExpiredCache } = require('./sqliteCache');
-
-// Cache cleanup interval in milliseconds (default: 15 minutes)
-const CLEANUP_INTERVAL = process.env.CACHE_CLEANUP_INTERVAL_MS || 15 * 60 * 1000;
-
-// Cache expiration time in seconds (default: 1 hour)
-const CACHE_EXPIRATION_SECONDS = process.env.CACHE_EXPIRATION_SECONDS || 60 * 60;
+const config = require('../config');
 
 /**
  * Start periodic cache cleanup
  */
 function startCacheCleanup() {
-  console.log(`Starting cache cleanup scheduler (interval: ${CLEANUP_INTERVAL}ms, expiration: ${CACHE_EXPIRATION_SECONDS}s)`);
+  const cleanupIntervalMs = config.CACHE.CLEANUP.INTERVAL_MS;
+  const expirationSeconds = config.CACHE.CLEANUP.EXPIRATION_SECONDS;
+  
+  console.log(`Starting cache cleanup scheduler (interval: ${cleanupIntervalMs}ms, expiration: ${expirationSeconds}s)`);
   
   // Run cleanup immediately and then at intervals
-  cleanupExpiredCache(CACHE_EXPIRATION_SECONDS)
+  cleanupExpiredCache(expirationSeconds)
     .catch(err => {
       console.error('Error during initial cache cleanup:', err);
     });
@@ -21,11 +19,11 @@ function startCacheCleanup() {
   // Schedule periodic cleanup
   const intervalId = setInterval(() => {
     console.log('Running scheduled cache cleanup...');
-    cleanupExpiredCache(CACHE_EXPIRATION_SECONDS)
+    cleanupExpiredCache(expirationSeconds)
       .catch(err => {
         console.error('Error during scheduled cache cleanup:', err);
       });
-  }, CLEANUP_INTERVAL);
+  }, cleanupIntervalMs);
   
   // Return interval ID so it can be cleared if needed
   return intervalId;

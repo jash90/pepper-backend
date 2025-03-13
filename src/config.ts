@@ -46,7 +46,9 @@ const SERVER = {
   // CORS origins
   CORS: {
     // Default origins (always allowed)
-    DEFAULT_ORIGINS: ['http://localhost:3000', 'http://localhost:3006'],
+    DEFAULT_ORIGINS: [
+      'http://localhost:*',
+    ],
     // Additional origins from environment variable
     ADDITIONAL_ORIGINS: process.env.CORS_ORIGIN ? 
       process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : [],

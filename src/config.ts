@@ -24,16 +24,16 @@ const CACHE = {
   },
   // Cleanup configuration
   CLEANUP: {
-    // Interval for cache cleanup in milliseconds (default: 15 minutes)
-    INTERVAL_MS: parseInt(process.env.CACHE_CLEANUP_INTERVAL_MS || '900000', 10),
-    // Maximum age of cached data in seconds (default: 1 hour)
-    EXPIRATION_SECONDS: parseInt(process.env.CACHE_EXPIRATION_SECONDS || '3600', 10)
+    // Interval for cache cleanup in milliseconds (default: 30 minutes)
+    INTERVAL_MS: parseInt(process.env.CACHE_CLEANUP_INTERVAL_MS || '1800000', 10),
+    // Maximum age of cached data in seconds (default: 2 hours)
+    EXPIRATION_SECONDS: parseInt(process.env.CACHE_EXPIRATION_SECONDS || '7200', 10)
   },
   // Default values for cache-related operations
   DEFAULTS: {
-    TTL: parseInt(process.env.CACHE_EXPIRATION || '3600', 10), // Default 1 hour in seconds
+    TTL: parseInt(process.env.CACHE_EXPIRATION || '7200', 10),
     DAYS_TO_CACHE: 7,
-    MAX_RESULTS: 500
+    MAX_RESULTS: 250
   }
 };
 
@@ -62,17 +62,17 @@ const SERVER = {
 // Scheduler configuration
 const SCHEDULER = {
   // Enable/disable scheduler
-  ENABLED: process.env.ENABLE_SCHEDULER !== 'false', // Default to true
+  ENABLED: process.env.ENABLE_SCHEDULER !== 'false',
   // Fetch and categorize scheduler settings
   FETCH_CATEGORIZE: {
     // Enable/disable fetch-categorize scheduler
-    ENABLED: process.env.ENABLE_FETCH_CATEGORIZE_SCHEDULER !== 'false', // Default to true
+    ENABLED: process.env.ENABLE_FETCH_CATEGORIZE_SCHEDULER !== 'false',
     // Maximum number of pages to fetch in scheduled job
     MAX_PAGES: parseInt(process.env.SCHEDULER_FETCH_PAGES || '1', 10),
     // Whether to use AI for categorization in scheduled job
-    USE_AI: process.env.SCHEDULER_USE_AI !== 'false', // Default to true
-    // Cron expression for the scheduler (every 10 minutes by default)
-    CRON_EXPRESSION: process.env.FETCH_CATEGORIZE_CRON || '*/10 * * * *'
+    USE_AI: process.env.SCHEDULER_USE_AI !== 'false',
+    // Cron expression for the scheduler (every 30 minutes by default)
+    CRON_EXPRESSION: process.env.FETCH_CATEGORIZE_CRON || '*/30 * * * *'
   }
 };
 
@@ -97,11 +97,11 @@ const API = {
   // Articles API
   ARTICLES: {
     // Maximum number of pages that can be fetched at once
-    MAX_PAGES: 10,
+    MAX_PAGES: 5,
     // Default number of pages to fetch
-    DEFAULT_PAGES: 3,
+    DEFAULT_PAGES: 2,
     // Default batch size for processing
-    DEFAULT_BATCH_SIZE: 50,
+    DEFAULT_BATCH_SIZE: 25,
     // Articles per page from Pepper.pl
     PER_PAGE: 30
   },
@@ -109,7 +109,7 @@ const API = {
   CATEGORIZATION: {
     PROMPT: process.env.CATEGORIZATION_PROMPT || 
       'Categorize this product or deal into ONE of the following categories: Electronics, Fashion, Home & Garden, Beauty, Sports, Toys, Food & Beverages, Travel, Services, Other. RESPOND ONLY WITH THE CATEGORY NAME.',
-    MAX_BATCH_SIZE: parseInt(process.env.MAX_CATEGORIZATION_BATCH_SIZE || '50', 10)
+    MAX_BATCH_SIZE: parseInt(process.env.MAX_CATEGORIZATION_BATCH_SIZE || '25', 10)
   },
   // Scraper configuration
   SCRAPER: {

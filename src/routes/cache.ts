@@ -95,7 +95,7 @@ router.post('/lookup', (async (req: Request<{}, any, LookupRequestBody>, res: Re
 router.get('/', (async (req: Request<{}, any, {}, CacheQueryParams>, res: Response) => {
   try {
     const days = parseInt(req.query.days as string || '7', 10);
-    const limit = parseInt(req.query.limit as string || '250', 10);
+    const limit = parseInt(req.query.limit as string || '500', 10);
     
     if (limit > 1000) {
       return res.status(400).json({
@@ -335,7 +335,7 @@ router.get('/category/:category', (async (req: Request<{category: string}, any, 
   try {
     const { category } = req.params;
     const days = parseInt(req.query.days as string || '7', 10);
-    const limit = parseInt(req.query.limit as string || '250', 10);
+    const limit = parseInt(req.query.limit as string || '500', 10);
     
     if (limit > 1000) {
       return res.status(400).json({

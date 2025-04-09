@@ -33,7 +33,7 @@ const CACHE = {
   DEFAULTS: {
     TTL: parseInt(process.env.CACHE_EXPIRATION || '7200', 10),
     DAYS_TO_CACHE: 7,
-    MAX_RESULTS: 250
+    MAX_RESULTS: 500
   }
 };
 

@@ -128,8 +128,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
   const limit = options.limit || config.CACHE.DEFAULTS.MAX_RESULTS;
   const skipLocalCache = options.skipLocalCache || false;
   
-  console.log(limit, config.CACHE.DEFAULTS.MAX_RESULTS);
-  if (limit > config.CACHE.DEFAULTS.MAX_RESULTS) {  console.log(limit, config.CACHE.DEFAULTS.MAX_RESULTS);
+  if (limit > config.CACHE.DEFAULTS.MAX_RESULTS) {
     throw new Error(`Invalid request: limit must be less than or equal to ${config.CACHE.DEFAULTS.MAX_RESULTS}`);
   }
   

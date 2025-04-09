@@ -112,7 +112,7 @@ router.get('/fetch-categorize-cache', (async (req: Request<{}, any, {}, Articles
 router.get('/cached', (async (req: Request<{}, any, {}, ArticlesRequestQuery>, res: Response) => {
   try {
     const days = parseInt(req.query.days as string || '7', 10);
-    const limit = parseInt(req.query.limit as string || '500', 10);
+    const limit = parseInt(req.query.limit as string || '250', 10);
     const minCached = req.query.minCached ? parseInt(req.query.minCached as string, 10) : null;
     const fallbackPages = parseInt(req.query.fallbackPages as string || '7', 10);
     const skipLocalCache = req.query.skipCache === 'true';

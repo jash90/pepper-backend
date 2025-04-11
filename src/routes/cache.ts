@@ -95,13 +95,6 @@ router.post('/lookup', (async (req: Request<{}, any, LookupRequestBody>, res: Re
 router.get('/', (async (req: Request<{}, any, {}, CacheQueryParams>, res: Response) => {
   try {
     const days = parseInt(req.query.days as string || '7', 10);
-    const limit = parseInt(req.query.limit as string || '500', 10);
-    
-    if (limit > 1000) {
-      return res.status(400).json({
-        error: 'Invalid request: limit must be less than or equal to 1000'
-      });
-    }
     
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -121,8 +114,7 @@ router.get('/', (async (req: Request<{}, any, {}, CacheQueryParams>, res: Respon
       .from('categorized_articles')
       .select('*')
       .gte('created_at', oldestDateIso)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
       
     if (error) {
       console.error('Supabase query error:', error);
@@ -329,19 +321,11 @@ router.get('/stats', (async (req: Request, res: Response) => {
  * @access Public
  * @param {string} category - Category to filter by
  * @query {number} days - Number of days of data to retrieve (default: 7)
- * @query {number} limit - Maximum number of results to return (default: 500)
  */
 router.get('/category/:category', (async (req: Request<{category: string}, any, {}, CacheQueryParams>, res: Response) => {
   try {
     const { category } = req.params;
     const days = parseInt(req.query.days as string || '7', 10);
-    const limit = parseInt(req.query.limit as string || '500', 10);
-    
-    if (limit > 1000) {
-      return res.status(400).json({
-        error: 'Invalid request: limit must be less than or equal to 1000'
-      });
-    }
     
     // Check if Supabase is configured
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
@@ -362,8 +346,7 @@ router.get('/category/:category', (async (req: Request<{category: string}, any, 
       .select('*')
       .eq('category', category)
       .gte('created_at', oldestDateIso)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
       
     if (error) {
       console.error(`Supabase query error for category ${category}:`, error);

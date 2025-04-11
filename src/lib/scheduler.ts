@@ -1,9 +1,26 @@
 import cron, { ScheduledTask } from 'node-cron';
 import axios from 'axios';
 import config from '../config';
+import { EventEmitter } from 'events';
 
 // Flaga lockująca, aby zapobiec równoczesnemu uruchomieniu wielu instancji zadania
 let isJobRunning = false;
+
+// Zwiększamy limit słuchaczy dla modułu axios
+if (axios.defaults.httpAgent) {
+  const httpAgent = axios.defaults.httpAgent as unknown as EventEmitter;
+  if (httpAgent && typeof httpAgent.setMaxListeners === 'function') {
+    httpAgent.setMaxListeners(25);
+  }
+}
+
+// Zwiększamy limit słuchaczy dla modułu https (używanego przez axios)
+if (axios.defaults.httpsAgent) {
+  const httpsAgent = axios.defaults.httpsAgent as unknown as EventEmitter;
+  if (httpsAgent && typeof httpsAgent.setMaxListeners === 'function') {
+    httpsAgent.setMaxListeners(25);
+  }
+}
 
 /**
  * Schedule a cron job to fetch and categorize articles every 10 minutes
@@ -20,6 +37,7 @@ function scheduleFetchCategorizeCache(): ScheduledTask | null {
   const cronExpression = config.FETCH_CATEGORIZE_CRON;
   console.log(`Setting up cron job to fetch and categorize articles with schedule: ${cronExpression}`);
   
+  // Tworzenie zadania z uwzględnieniem parametrów konfiguracyjnych
   const cronJob = cron.schedule(cronExpression, async () => {
     // Jeśli zadanie jest już uruchomione, pomijamy tę iterację
     if (isJobRunning) {
@@ -38,19 +56,30 @@ function scheduleFetchCategorizeCache(): ScheduledTask | null {
       
       // Pobieramy tylko 1 stronę artykułów zamiast domyślnych 3, żeby zaoszczędzić zasoby
       const pagesParam = Math.min(config.SCHEDULER_FETCH_PAGES || 1, 2); // Maksymalnie 2 strony w zadaniu cron
-      const endpoint = `/api/articles/fetch-categorize-cache?maxPages=${pagesParam}`;
+      const endpoint = `/api/articles/fetch-categorize-cache?maxPages=10`;
       const url = `${baseUrl}${endpoint}`;
       
       console.log(`Making request to ${url}`);
       
-      // Make the HTTP request to the endpoint, z timeoutem
-      const response = await axios.get(url, {
+      // Tworzymy nową instancję axios z własnymi ustawieniami agenta
+      const axiosInstance = axios.create({
         timeout: 60000, // 60 sekund timeoutu
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',
         }
       });
+      
+      // Zwiększamy limit słuchaczy dla tej konkretnej instancji
+      if (axiosInstance.defaults.httpAgent) {
+        const agent = axiosInstance.defaults.httpAgent as unknown as EventEmitter;
+        if (agent && typeof agent.setMaxListeners === 'function') {
+          agent.setMaxListeners(25);
+        }
+      }
+      
+      // Make the HTTP request to the endpoint, z timeoutem
+      const response = await axiosInstance.get(url);
       
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`Scheduled job completed successfully in ${duration}s. Fetched and categorized ${
@@ -81,6 +110,12 @@ function scheduleFetchCategorizeCache(): ScheduledTask | null {
       }
     }
   });
+  
+  // Zwiększamy limit słuchaczy dla zadania cron, jeśli jest emiterem zdarzeń
+  const cronJobAsEmitter = cronJob as unknown as EventEmitter;
+  if (cronJobAsEmitter && typeof cronJobAsEmitter.setMaxListeners === 'function') {
+    cronJobAsEmitter.setMaxListeners(25);
+  }
   
   // Return the cron job so it can be stopped if needed
   return cronJob;

@@ -250,13 +250,8 @@ async function getData<T = any>(table: string, options: GetDataOptions = {}): Pr
       query = query.order(column, { ascending: ascending ?? true });
     }
 
-    // Apply pagination if provided
-    if (options.limit) {
-      query = query.limit(options.limit);
-    }
-
     if (options.offset !== undefined) {
-      query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
+      query = query.range(options.offset, options.offset - 1);
     }
 
     const { data, error } = await query;

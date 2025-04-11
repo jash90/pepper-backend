@@ -104,7 +104,6 @@ router.get('/fetch-categorize-cache', (async (req: Request<{}, any, {}, Articles
  * @desc Pobiera skategoryzowane artykuły z cache (lokalnego SQLite lub Supabase), z opcją fallbacku do pobierania z Pepper.pl
  * @access Public
  * @query {number} days - Liczba dni danych do pobrania (domyślnie 7)
- * @query {number} limit - Maksymalna liczba wyników (domyślnie 500)
  * @query {number} minCached - Minimalna liczba artykułów oczekiwanych w cache, jeśli mniej - użyj fallbacku (opcjonalnie)
  * @query {number} fallbackPages - Liczba stron do pobrania w przypadku fallbacku (domyślnie 7)
  * @query {boolean} skipLocalCache - Czy pominąć lokalny cache SQLite (domyślnie false)
@@ -112,21 +111,13 @@ router.get('/fetch-categorize-cache', (async (req: Request<{}, any, {}, Articles
 router.get('/cached', (async (req: Request<{}, any, {}, ArticlesRequestQuery>, res: Response) => {
   try {
     const days = parseInt(req.query.days as string || '7', 10);
-    const limit = parseInt(req.query.limit as string || '500', 10);
     const minCached = req.query.minCached ? parseInt(req.query.minCached as string, 10) : null;
     const fallbackPages = parseInt(req.query.fallbackPages as string || '7', 10);
     const skipLocalCache = req.query.skipCache === 'true';
     
-    if (limit > 1000) {
-      return res.status(400).json({
-        error: 'Invalid request: limit must be less than or equal to 1000'
-      });
-    }
-    
     // Get cached articles from the service
     const result = await articlesService.getCachedArticles({
       days,
-      limit,
       minCached,
       skipLocalCache
     });

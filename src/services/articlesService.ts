@@ -125,12 +125,7 @@ async function fetchArticlesFromMultiplePages(pagesToFetch = 3): Promise<Article
  */
 async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<CategorizedArticlesResult> {
   const days = options.days || config.CACHE.DEFAULTS.DAYS_TO_CACHE;
-  const limit = options.limit || config.CACHE.DEFAULTS.MAX_RESULTS;
   const skipLocalCache = options.skipLocalCache || false;
-  
-  if (limit > config.CACHE.DEFAULTS.MAX_RESULTS) {
-    throw new Error(`Invalid request: limit must be less than or equal to ${config.CACHE.DEFAULTS.MAX_RESULTS}`);
-  }
   
   // Check if Supabase is configured
   if (!supabaseService.isConfigured()) {
@@ -145,7 +140,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
   if (!skipLocalCache) {
     console.log('Checking local SQLite cache...');
     try {
-      const cacheKey = `articles_cached_days_${days}_limit_${limit}`;
+      const cacheKey = `articles_cached_days_${days}`;
       cachedResult = await cacheService.getCachedValue(cacheKey);
       
       if (cachedResult) {
@@ -186,8 +181,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
       order: {
         column: 'created_at',
         ascending: false
-      },
-      limit: limit
+      }
     });
     
     // Convert Supabase records to our application's format
@@ -227,7 +221,7 @@ async function getCachedArticles(options: CachedArticlesOptions = {}): Promise<C
     if (!skipLocalCache && totalArticles > 0) {
       console.log('Storing results in local SQLite cache');
       try {
-        const cacheKey = `articles_cached_days_${days}_limit_${limit}`;
+        const cacheKey = `articles_cached_days_${days}`;
         await cacheService.setCachedValue(cacheKey, result, CACHE_EXPIRATION);
       } catch (cacheError) {
         console.error('Failed to store in local cache, but continuing:', cacheError);
